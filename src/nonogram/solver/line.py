@@ -7,13 +7,19 @@ clue's blocks agrees with the line's known cells (a contradiction). Solvers
 never modify their input.
 """
 
-from collections.abc import Sequence
+from collections import OrderedDict
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 
 import numpy as np
 
 UNKNOWN = -1
 EMPTY = 0
 FILLED = 1
+
+LineSolver = Callable[[Sequence[int], np.ndarray], "np.ndarray | None"]
+
+DEFAULT_CACHE_SIZE = 50_000
 
 
 def solve_simple(clue: Sequence[int], line: np.ndarray) -> np.ndarray | None:
@@ -193,3 +199,88 @@ def _leftmost(clue: Sequence[int], cells: Sequence[int]) -> list[int] | None:
         starts.append(s)
         pos = after(b, s)
     return starts
+
+
+@dataclass(frozen=True)
+class CacheStats:
+    """A snapshot of a line-solver cache's counters."""
+
+    hits: int
+    misses: int
+    size: int
+    maxsize: int
+
+    @property
+    def lookups(self) -> int:
+        return self.hits + self.misses
+
+    @property
+    def hit_rate(self) -> float:
+        """Fraction of lookups answered from the cache; 0.0 before any lookup."""
+        return self.hits / self.lookups if self.lookups else 0.0
+
+
+class CachedLineSolver:
+    """Memoizes a line solver in a size-capped LRU cache.
+
+    Keyed by ``(clue, line.tobytes())``, with lines normalized to ``int8`` so
+    equal states always share a key. Line solvers are pure functions of that
+    key, so a cached answer is always the one the solver would give; this
+    lets one cache serve every re-solve in the generation loop. Contradictions
+    (``None``) are cached too.
+
+    Results are shared between callers, so they are returned read-only;
+    copy one before modifying it. ``maxsize=0`` disables storage but still
+    counts lookups.
+    """
+
+    def __init__(self, solver: LineSolver, maxsize: int = DEFAULT_CACHE_SIZE) -> None:
+        if maxsize < 0:
+            raise ValueError(f"maxsize must be >= 0, got {maxsize}")
+        self.solver = solver
+        self.maxsize = maxsize
+        self._entries: OrderedDict[tuple[tuple[int, ...], bytes], np.ndarray | None] = (
+            OrderedDict()
+        )
+        self._hits = 0
+        self._misses = 0
+
+    def __call__(self, clue: Sequence[int], line: np.ndarray) -> np.ndarray | None:
+        line = np.asarray(line, dtype=np.int8)
+        key = (tuple(clue), line.tobytes())
+        entries = self._entries
+        if key in entries:
+            self._hits += 1
+            entries.move_to_end(key)
+            return entries[key]
+
+        self._misses += 1
+        result = self.solver(clue, line)
+        if result is not None:
+            result.flags.writeable = False
+        if self.maxsize:
+            entries[key] = result
+            if len(entries) > self.maxsize:
+                entries.popitem(last=False)
+        return result
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    @property
+    def stats(self) -> CacheStats:
+        return CacheStats(self._hits, self._misses, len(self._entries), self.maxsize)
+
+    @property
+    def hit_rate(self) -> float:
+        return self.stats.hit_rate
+
+    def reset_stats(self) -> None:
+        """Zero the hit and miss counters, keeping cached entries."""
+        self._hits = 0
+        self._misses = 0
+
+    def clear(self) -> None:
+        """Drop every cached entry and zero the counters."""
+        self._entries.clear()
+        self.reset_stats()
