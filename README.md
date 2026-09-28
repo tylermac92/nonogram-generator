@@ -7,6 +7,7 @@ See `docs/product_brief.md` and `docs/technical_design_document.md`.
 
 ```sh
 pip install -e ".[dev]"   # add ",numba" for the optional JIT extra
-pytest
+pytest                    # full suite, including ~2 min soundness sweeps
+pytest -m "not slow"      # quick run
 nonogram --help
 ```

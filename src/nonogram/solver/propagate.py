@@ -57,8 +57,11 @@ def propagate(
     a line has a contradiction, or the full solver finds nothing new.
 
     ``grid`` is an ``int8`` array of UNKNOWN, EMPTY, and FILLED cells and is
-    not modified. Every line is checked against its clue at least once when
-    ``dirty`` is None. Pass ``CachedLineSolver`` instances as ``simple`` and
+    not modified. With the default ``dirty=None``, every line is checked
+    against its clue. An explicit ``dirty`` set declares every other line
+    already at a fixpoint of both solvers, as when restarting from a
+    propagated grid after setting a few cells; those lines are re-solved
+    only once a crossing deduction changes them. Pass ``CachedLineSolver`` instances as ``simple`` and
     ``full`` to reuse line results across calls.
     """
     grid = np.array(grid, dtype=np.int8)
@@ -73,8 +76,15 @@ def propagate(
         axis, i = line
         return grid[i, :] if axis == ROW else grid[:, i]
 
+    all_lines = [(ROW, r) for r in range(height)] + [(COL, c) for c in range(width)]
+    # Lines whose current state the full solver has already exhausted. With an
+    # explicit dirty set, every other line is assumed to be at a fixpoint.
     if dirty is None:
-        dirty = [(ROW, r) for r in range(height)] + [(COL, c) for c in range(width)]
+        dirty = all_lines
+        full_clean: set[Line] = set()
+    else:
+        dirty = list(dirty)
+        full_clean = set(all_lines).difference(dirty)
     queue: deque[Line] = deque()
     queued: set[Line] = set()
     for line in dirty:
@@ -82,8 +92,6 @@ def propagate(
             queue.append(line)
             queued.add(line)
 
-    # Lines whose current state the full solver has already exhausted.
-    full_clean: set[Line] = set()
     counts = {"simple": 0, "full": 0}
 
     def apply(line: Line, result: np.ndarray, technique: str) -> bool:
