@@ -20,6 +20,7 @@ from nonogram.image import (
     downsample,
     grayscale,
     load_image,
+    otsu_threshold,
 )
 
 ORIENTATION = 0x0112
@@ -415,3 +416,79 @@ def test_rejects_grid_sizes_out_of_range(rows, cols):
 def test_rejects_bad_adjustments(kwargs, match):
     with pytest.raises(ImageError, match=match):
         brightness_grid(Image.new("RGB", (100, 100)), 10, 10, **kwargs)
+
+
+# --- Otsu threshold ------------------------------------------------------------------
+
+
+def within_variance(values: np.ndarray, threshold: float) -> float:
+    """Weighted within-group variance of the split at `threshold`."""
+    flat = values.ravel()
+    dark, light = flat[flat < threshold], flat[flat >= threshold]
+    return dark.size * dark.var() + light.size * light.var()
+
+
+def best_split(values: np.ndarray) -> float | None:
+    """Brute force: the smallest within-group variance over every split
+    between consecutive distinct values, or None if there is only one value."""
+    levels = np.unique(values)
+    splits = [(low + high) / 2 for low, high in zip(levels, levels[1:])]
+    return min((within_variance(values, t) for t in splits), default=None)
+
+
+@pytest.mark.parametrize(
+    "dark, light, dark_share",
+    [(0, 255, 0.5), (40, 200, 0.2), (100, 140, 0.8), (0, 30, 0.5), (220, 250, 0.35), (10, 245, 0.03)],
+)
+@pytest.mark.parametrize("rows, cols", [(20, 30), (80, 80), (5, 17)])
+def test_threshold_falls_between_the_tones_of_a_two_tone_image(dark, light, dark_share, rows, cols):
+    # A dark block on the left of a light background. Where the block's edge
+    # cuts through a cell, that cell takes an in-between value.
+    width, height = 900, 600
+    im = Image.new("L", (width, height), light)
+    im.paste(dark, (0, 0, round(width * dark_share), height))
+    grid = brightness_grid(im.convert("RGB"), rows, cols)
+    threshold = otsu_threshold(grid)
+    assert dark / 255 < threshold < light / 255
+    # Every cell of pure tone lands on the right side.
+    assert (grid[grid == dark / 255] < threshold).all()
+    assert (grid[grid == light / 255] >= threshold).all()
+
+
+def test_threshold_of_an_exact_two_tone_grid_is_the_midpoint():
+    grid = np.array([[0.2, 0.2, 0.8], [0.8, 0.2, 0.8]])
+    assert otsu_threshold(grid) == pytest.approx(0.5)
+
+
+def test_threshold_separates_two_noisy_tones():
+    rng = np.random.default_rng(7)
+    dark = np.clip(rng.normal(0.25, 0.05, 1200), 0, 1)
+    light = np.clip(rng.normal(0.75, 0.05, 2800), 0, 1)
+    grid = np.concatenate([dark, light]).reshape(40, 100)
+    threshold = otsu_threshold(grid)
+    assert dark.max() < threshold < light.min()
+
+
+@settings(max_examples=200, deadline=None)
+@given(hnp.arrays(np.float64, st.tuples(st.integers(1, 12), st.integers(1, 12)),
+                  elements=st.sampled_from(np.linspace(0, 1, 9))))
+def test_threshold_matches_brute_force(grid):
+    # Compare the quality of the split rather than the threshold itself:
+    # symmetric grids can have two equally good splits.
+    best = best_split(grid)
+    threshold = otsu_threshold(grid)
+    if best is None:
+        assert threshold == 0.5
+    else:
+        assert np.isin(threshold, [(a + b) / 2 for a, b in zip(np.unique(grid), np.unique(grid)[1:])])
+        assert within_variance(grid, threshold) == pytest.approx(best, abs=1e-9)
+
+
+def test_single_tone_grid_gets_the_neutral_default():
+    assert otsu_threshold(np.full((10, 10), 0.3)) == 0.5
+
+
+@pytest.mark.parametrize("grid", [np.empty((0, 5)), np.array([[0.1, np.nan]])])
+def test_threshold_rejects_empty_or_non_finite_grids(grid):
+    with pytest.raises(ImageError):
+        otsu_threshold(grid)

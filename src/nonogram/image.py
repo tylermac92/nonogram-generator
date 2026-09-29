@@ -148,6 +148,34 @@ def brightness_grid(
     return reduced @ col_weights.T
 
 
+def otsu_threshold(grid: np.ndarray) -> float:
+    """Otsu's threshold for a brightness grid: the default slider value.
+
+    Tries every split between consecutive distinct brightness values and
+    keeps the one that maximises the variance between the dark and light
+    groups (equivalently, minimises the variance within them). Returns the
+    midpoint of that split, so the dark group falls below the threshold
+    (filled) and the light group at or above it (empty). The search is exact
+    rather than over histogram bins, which matters on small grids. Ties go
+    to the darker split. A grid with a single brightness has nothing to
+    separate and gets 0.5.
+    """
+    values = np.asarray(grid, dtype=np.float64).ravel()
+    if values.size == 0 or not np.isfinite(values).all():
+        raise ImageError("Brightness grid must be non-empty and finite.")
+    levels, counts = np.unique(values, return_counts=True)
+    if len(levels) == 1:
+        return 0.5
+    # Dark group = levels[: k + 1] for each split k; light group = the rest.
+    dark_count = np.cumsum(counts)[:-1].astype(np.float64)
+    dark_sum = np.cumsum(counts * levels)[:-1]
+    light_count = values.size - dark_count
+    light_sum = values.sum() - dark_sum
+    between = dark_count * light_count * (dark_sum / dark_count - light_sum / light_count) ** 2
+    k = int(np.argmax(between))
+    return float((levels[k] + levels[k + 1]) / 2)
+
+
 _BAND_PIXELS = 1 << 22  # about 32 MB of float64 per band
 
 
