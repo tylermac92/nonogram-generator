@@ -1,12 +1,11 @@
-import json
 import time
-from pathlib import Path
 
 import numpy as np
 import pytest
 from hypothesis import HealthCheck, assume, given, settings
 from hypothesis import strategies as st
 
+from corpus import ids, select
 from grid_reference import count_solutions
 from nonogram.clues import derive_clues
 from nonogram.solver.line import UNKNOWN
@@ -14,8 +13,7 @@ from nonogram.solver.probe import solve
 from nonogram.solver.propagate import Status, propagate
 from nonogram.solver.search import DEFAULT_SEARCH_BUDGET, Outcome, find_second_solution
 
-CORPUS = json.loads((Path(__file__).parents[1] / "corpus" / "puzzles.json").read_text())["puzzles"]
-AMBIGUOUS = [e for e in CORPUS if e["solutions"] != 1]
+AMBIGUOUS = select(solutions="2+")
 
 
 def grid_of(rows: list[str]) -> np.ndarray:
@@ -41,7 +39,7 @@ def test_corpus_has_ambiguous_puzzles():
     assert len(AMBIGUOUS) >= 5
 
 
-@pytest.mark.parametrize("entry", AMBIGUOUS, ids=[e["name"] for e in AMBIGUOUS])
+@pytest.mark.parametrize("entry", AMBIGUOUS, ids=ids(AMBIGUOUS))
 def test_finds_second_solution_for_ambiguous_corpus_puzzles(entry):
     target = grid_of(entry["solution"])
     rows, cols = derive_clues(target)
@@ -79,7 +77,7 @@ def test_outcome_matches_brute_force_count(case):
 
 def test_proves_uniqueness_when_logic_stalls_early():
     # A puzzle probing solves, searched from its propagation-only stall.
-    entry = next(e for e in CORPUS if e["requires"] == "depth1")
+    entry = select("hard")[0]
     target = grid_of(entry["solution"])
     rows, cols = derive_clues(target)
     stalled = propagate(blank(target.shape), rows, cols).grid
