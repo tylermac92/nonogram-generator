@@ -1,6 +1,4 @@
-import json
 import time
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -13,7 +11,7 @@ from nonogram.solver.line import UNKNOWN, CachedLineSolver, solve_full, solve_si
 from nonogram.solver.probe import _Context, _probe_cell, solve
 from nonogram.solver.propagate import Status, propagate
 
-CORPUS = json.loads((Path(__file__).parents[1] / "corpus" / "puzzles.json").read_text())["puzzles"]
+from corpus import DEPTH, PUZZLES as CORPUS, ids, select
 
 
 def grid_of(rows: list[str]) -> np.ndarray:
@@ -36,27 +34,32 @@ def assert_sound(result, solution: np.ndarray, start: np.ndarray | None = None) 
 # --- Corpus ---------------------------------------------------------------
 
 
-@pytest.mark.parametrize("entry", CORPUS, ids=[e["name"] for e in CORPUS])
+@pytest.mark.parametrize("entry", CORPUS, ids=ids(CORPUS))
 def test_corpus(entry):
     solution = grid_of(entry["solution"])
     rows, cols = derive_clues(solution)
     start = blank(solution.shape)
     line_only = propagate(start, rows, cols).status
-    by_depth = {d: solve(start, rows, cols, max_depth=d) for d in (0, 1, 2)}
+    # Where logic can't finish, depth 2 fails to solve whether it runs out
+    # of budget or not, so a short budget suffices; test_corpus.py checks
+    # the full stall separately.
+    budget = 1.0 if entry["rating"] is None else 60.0
+    by_depth = {
+        d: solve(start, rows, cols, max_depth=d, depth2_budget=budget) for d in (0, 1, 2)
+    }
     for result in by_depth.values():
         assert_sound(result, solution)
 
     solved_at = min((d for d, r in by_depth.items() if r.status is Status.SOLVED), default=None)
-    expected = {"line": 0, "depth1": 1, "depth2": 2, "none": None}[entry["requires"]]
+    expected = DEPTH[entry["rating"]]
     assert solved_at == expected
     assert (line_only is Status.SOLVED) == (expected == 0)
     if expected is not None:
         assert np.array_equal(by_depth[2].grid, solution.astype(np.int8))
-    assert (entry["solutions"] == 1) == (expected is not None)
 
 
 def test_corpus_has_puzzles_line_solving_cannot_finish():
-    needs_probing = [e for e in CORPUS if e["requires"] in ("depth1", "depth2")]
+    needs_probing = select("hard") + select("expert")
     assert len(needs_probing) >= 5
 
 
@@ -120,7 +123,7 @@ def test_same_in_both_branches_rule():
 
 
 def test_refuted_assumption_sets_the_cell():
-    for entry in (e for e in CORPUS if e["requires"] == "depth1"):
+    for entry in select("hard"):
         solution = grid_of(entry["solution"])
         rows, cols = derive_clues(solution)
         stalled = propagate(blank(solution.shape), rows, cols).grid
@@ -162,7 +165,7 @@ def test_detects_contradiction_that_propagation_misses():
 
 
 def test_max_depth_zero_is_propagation():
-    entry = next(e for e in CORPUS if e["requires"] == "depth1")
+    entry = select("hard")[0]
     solution = grid_of(entry["solution"])
     rows, cols = derive_clues(solution)
     result = solve(blank(solution.shape), rows, cols, max_depth=0)
@@ -173,7 +176,7 @@ def test_max_depth_zero_is_propagation():
 
 
 def test_counts_cells_by_technique():
-    entry = next(e for e in CORPUS if e["requires"] == "depth1")
+    entry = select("hard")[0]
     solution = grid_of(entry["solution"])
     rows, cols = derive_clues(solution)
     result = solve(blank(solution.shape), rows, cols, max_depth=1)
@@ -184,7 +187,7 @@ def test_counts_cells_by_technique():
 
 
 def test_input_grid_is_not_modified():
-    entry = next(e for e in CORPUS if e["requires"] == "depth1")
+    entry = select("hard")[0]
     solution = grid_of(entry["solution"])
     rows, cols = derive_clues(solution)
     start = blank(solution.shape)
@@ -243,7 +246,7 @@ def test_depth2_does_not_overrun_its_budget_in_real_time():
 
 
 def test_timed_out_flag_is_clear_when_depth2_finishes():
-    solution = grid_of(next(e for e in CORPUS if e["requires"] == "none")["solution"])
+    solution = grid_of(select(None, "2+")[0]["solution"])
     rows, cols = derive_clues(solution)
     result = solve(blank(solution.shape), rows, cols, max_depth=2, depth2_budget=60)
     assert result.status is Status.STALLED
@@ -252,7 +255,9 @@ def test_timed_out_flag_is_clear_when_depth2_finishes():
 
 def test_shared_caches_give_identical_results():
     simple, full = CachedLineSolver(solve_simple), CachedLineSolver(solve_full)
-    for entry in CORPUS:
+    # Skip puzzles whose solve ends at the depth-2 budget: where it stops
+    # depends on timing, so two runs needn't match.
+    for entry in (e for e in CORPUS if not (e["rating"] is None and e["solutions"] == 1)):
         solution = grid_of(entry["solution"])
         rows, cols = derive_clues(solution)
         plain = solve(blank(solution.shape), rows, cols)
