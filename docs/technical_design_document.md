@@ -113,7 +113,7 @@ Here *p* is the cell's brightness, *t* the threshold, *n* the number of 8-neighb
 
 **Full re-solve.** Each iteration re-solves from an empty grid. Changing one clue can invalidate deductions anywhere, so reusing the previous solve state isn't safe. The line-solver cache makes this cheap, because most lines' clues and states repeat. This corrects the brief's "re-solve only affected lines" mitigation.
 
-**Limits.** Generation fails when no eligible flip candidates remain, or after 200 iterations or 120 seconds, with a message suggesting a larger grid or a different threshold. The result carries a warning when flipped cells exceed 5% of the grid.
+**Limits.** Generation fails when no eligible flip candidates remain, or after 200 iterations or 120 seconds, with a message suggesting a larger grid or a different threshold. The result carries a warning when flipped cells exceed 5% of the grid. The clock is checked after each stalled solve, so a run can overshoot 120 seconds by one solve; a late solve that succeeds is kept.
 
 ## Difficulty rating
 

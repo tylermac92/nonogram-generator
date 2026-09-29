@@ -4,6 +4,7 @@ import math
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from enum import Enum
 
 import numpy as np
 
@@ -19,6 +20,8 @@ MAX_FLIPS = 4  # cells flipped per iteration
 MIN_FLIP_SPACING = 4  # Chebyshev distance between cells flipped together
 MAX_ITERATIONS = 200
 TIME_BUDGET = 120.0  # seconds
+# More flipped cells than this fraction of the grid earns a warning.
+MAX_FLIPPED_FRACTION = 0.05
 # Depth-2 probing runs only when depth 1 stalls with at most this many
 # unknown cells (see benchmarks/RESULTS.md). Its cost tracks that count, and
 # a count gate, unlike a time budget, gives the same result on any machine.
@@ -115,8 +118,27 @@ def _filled_neighbors(filled: np.ndarray) -> np.ndarray:
     return total
 
 
+class FailureReason(Enum):
+    NO_CANDIDATES = "no_candidates"  # every cell that could help was flipped already
+    ITERATIONS = "iterations"  # MAX_ITERATIONS solves without a unique result
+    TIME = "time"  # TIME_BUDGET seconds without a unique result
+
+
 class GenerationError(Exception):
-    """The flip loop couldn't make the puzzle unique within its limits."""
+    """The flip loop couldn't make the puzzle unique within its limits.
+
+    The message is fit for the user and suggests a larger grid or a
+    different threshold. ``reason`` says which limit was hit;
+    ``iterations`` and ``flipped_cells`` describe how far it got.
+    """
+
+    def __init__(
+        self, message: str, reason: FailureReason, iterations: int, flipped_cells: int
+    ):
+        super().__init__(message)
+        self.reason = reason
+        self.iterations = iterations
+        self.flipped_cells = flipped_cells
 
 
 @dataclass(frozen=True)
@@ -142,6 +164,23 @@ class Generated:
     @property
     def flipped_count(self) -> int:
         return int(self.flipped.sum())
+
+    @property
+    def flipped_pct(self) -> float:
+        """Flipped cells as a percentage of the grid."""
+        return 100.0 * self.flipped_count / self.solution.size
+
+    @property
+    def warning(self) -> str | None:
+        """A warning when flipped cells exceed ``MAX_FLIPPED_FRACTION`` of
+        the grid, since the puzzle then strays visibly from the image."""
+        if self.flipped_count <= MAX_FLIPPED_FRACTION * self.solution.size:
+            return None
+        return (
+            f"{self.flipped_count} of {self.solution.size} cells ({self.flipped_pct:.1f}%) "
+            f"were changed to make the puzzle unique, so it may look noticeably different "
+            f"from the image. {_ADVICE}"
+        )
 
 
 def generate(
@@ -172,8 +211,16 @@ def generate(
     ``seed`` drives the cost tie-break, so the same inputs and seed give
     the same puzzle (unless a time budget runs out). Raises
     ``GenerationError`` when no eligible candidate remains, or after
-    ``max_iterations`` solves or ``time_budget`` seconds.
+    ``max_iterations`` solves or ``time_budget`` seconds. The clock is
+    checked after each stalled solve, so a run can overshoot the budget by
+    at most one solve; a solve that finishes late but succeeds is kept.
     """
+    if isinstance(max_iterations, bool) or not isinstance(max_iterations, int):
+        raise ValueError(f"max_iterations must be an integer, got {max_iterations!r}")
+    if max_iterations < 1:
+        raise ValueError(f"max_iterations must be at least 1, got {max_iterations}")
+    if not time_budget > 0:
+        raise ValueError(f"time_budget must be greater than 0, got {time_budget!r}")
     original = threshold_grid(brightness, threshold, invert)
     solution = original.copy()
     rng = np.random.default_rng(seed)
@@ -185,6 +232,17 @@ def generate(
     }
     deadline = clock() + time_budget
     batches: list[tuple[tuple[int, int], ...]] = []
+    iteration = 0
+
+    def fail(what: str, reason: FailureReason) -> GenerationError:
+        flipped = int((solution != original).sum())
+        return GenerationError(
+            f"Couldn't make the puzzle unique: {what} ({flipped} cells changed). {_ADVICE}",
+            reason,
+            iteration,
+            flipped,
+        )
+
     for iteration in range(1, max_iterations + 1):
         row_clues, col_clues = derive_clues(solution)
         result = solve_gated(
@@ -197,11 +255,13 @@ def generate(
         )
         if result.status is Status.SOLVED:
             return Generated(solution, original, tuple(batches), iteration, result)
+        if iteration == max_iterations:
+            # No point searching for flips that will never be tried.
+            break
         remaining = deadline - clock()
         if remaining <= 0:
-            raise GenerationError(
-                f"Couldn't make the puzzle unique within {time_budget:g} seconds "
-                f"({len(batches)} rounds of flips). {_ADVICE}"
+            raise fail(
+                f"ran out of time after {time_budget:g} seconds", FailureReason.TIME
             )
         search = find_second_solution(
             result.grid,
@@ -214,17 +274,19 @@ def generate(
         )
         eligible = flip_candidates(search, result.grid, solution != original)
         if not eligible.any():
-            raise GenerationError(
-                "Couldn't make the puzzle unique: every cell that could resolve the "
-                f"ambiguity has already been flipped. {_ADVICE}"
+            raise fail(
+                "every cell that could resolve the ambiguity has already been changed",
+                FailureReason.NO_CANDIDATES,
             )
         costs = flip_costs(brightness, solution, threshold, rng, weights)
         batch = pick_batch(costs, eligible)
         for r, c in batch:
             solution[r, c] = not solution[r, c]
         batches.append(batch)
-    raise GenerationError(
-        f"Couldn't make the puzzle unique within {max_iterations} iterations. {_ADVICE}"
+    plural = "s" if max_iterations != 1 else ""
+    raise fail(
+        f"still ambiguous after {max_iterations} iteration{plural}",
+        FailureReason.ITERATIONS,
     )
 
 

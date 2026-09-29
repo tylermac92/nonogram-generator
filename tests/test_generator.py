@@ -14,6 +14,10 @@ from nonogram.generator import (
     MAX_FLIPS,
     MIN_FLIP_SPACING,
     FlipWeights,
+    MAX_ITERATIONS,
+    TIME_BUDGET,
+    FailureReason,
+    Generated,
     GenerationError,
     flip_candidates,
     flip_costs,
@@ -23,7 +27,7 @@ from nonogram.generator import (
 )
 from nonogram.image import threshold_grid
 from nonogram.solver.line import UNKNOWN
-from nonogram.solver.probe import solve
+from nonogram.solver.probe import SolveResult, solve
 from nonogram.solver.propagate import Status
 from nonogram.solver.search import Outcome, SearchResult
 
@@ -525,23 +529,168 @@ def test_generate_passes_the_gate_through():
     assert result.flipped_count == 0 and result.solve.probe2_cells > 0
 
 
-# Failure
+# Limits
+
+ADVICE = "Try a larger grid or a different threshold."
 
 
 def test_iteration_limit():
-    with pytest.raises(GenerationError, match="within 1 iterations"):
+    with pytest.raises(GenerationError) as info:
         generate(checker_image(), 0.5, seed=0, max_iterations=1)
+    error = info.value
+    assert error.reason is FailureReason.ITERATIONS
+    assert "still ambiguous after 1 iteration " in str(error) and ADVICE in str(error)
+    assert (error.iterations, error.flipped_cells) == (1, 0)
+
+
+def test_default_iteration_limit_is_200(monkeypatch):
+    # Pretend every solve stalls and the search always finds new cells.
+    stalled = SolveResult(Status.STALLED, np.full((10, 10), UNKNOWN, dtype=np.int8))
+    monkeypatch.setattr(generator, "solve_gated", lambda *a, **k: stalled)
+    searches = []
+
+    def search(grid, *args, **kwargs):
+        searches.append(1)
+        return SearchResult(Outcome.TIMED_OUT, grid == UNKNOWN)
+
+    monkeypatch.setattr(generator, "find_second_solution", search)
+    monkeypatch.setattr(generator, "pick_batch", lambda costs, eligible: ())
+    with pytest.raises(GenerationError, match="after 200 iterations") as info:
+        generate(NOISE[0], 0.5, seed=0)
+    assert MAX_ITERATIONS == 200 and info.value.iterations == 200
+    # The last solve's stall isn't searched: its flips could never be tried.
+    assert len(searches) == 199
 
 
 def test_time_limit():
+    # Each clock read advances 100 s: the first stall is already past 120 s.
     ticks = itertools.count(step=100)
-    with pytest.raises(GenerationError, match="within 120 seconds"):
+    with pytest.raises(GenerationError) as info:
         generate(checker_image(), 0.5, seed=0, clock=lambda: next(ticks))
+    error = info.value
+    assert TIME_BUDGET == 120
+    assert error.reason is FailureReason.TIME
+    assert "ran out of time after 120 seconds" in str(error) and ADVICE in str(error)
+    assert (error.iterations, error.flipped_cells) == (1, 0)
+
+
+def test_time_limit_counts_from_the_start(monkeypatch):
+    now = [0.0]
+    real_search = generator.find_second_solution
+
+    def slow_search(*args, **kwargs):
+        now[0] += 50  # each search takes 50 s of fake time
+        return real_search(*args, **kwargs)
+
+    monkeypatch.setattr(generator, "find_second_solution", slow_search)
+    with pytest.raises(GenerationError, match="120 seconds") as info:
+        generate(NOISE[2], 0.5, seed=0, clock=lambda: now[0])
+    # This grid needs 6 solves unhindered. Searches end at 50, 100 and
+    # 150 s, so the fourth stall is past 120 s.
+    assert info.value.iterations == 4 and info.value.flipped_cells > 0
+
+
+def test_late_but_successful_solve_is_kept():
+    # Past the deadline before the first solve finishes, but it succeeds.
+    brightness = np.full((8, 8), 0.9)
+    brightness[2:5, 1:6] = 0.1
+    ticks = itertools.count(step=1000)
+    result = generate(brightness, 0.5, seed=0, clock=lambda: next(ticks))
+    assert result.solve.status is Status.SOLVED
 
 
 def test_no_eligible_candidates(monkeypatch):
     monkeypatch.setattr(
         generator, "flip_candidates", lambda s, g, f: np.zeros(g.shape, bool)
     )
-    with pytest.raises(GenerationError, match="already been flipped"):
+    with pytest.raises(GenerationError) as info:
         generate(checker_image(), 0.5, seed=0)
+    error = info.value
+    assert error.reason is FailureReason.NO_CANDIDATES
+    assert "already been changed" in str(error) and ADVICE in str(error)
+
+
+def test_candidates_run_out_after_flips(monkeypatch):
+    # The search only ever offers the checker's four cells: after flipping
+    # the ones it picks, nothing eligible is left.
+    square = np.zeros((6, 6), bool)
+    square[2:4, 2:4] = True
+    monkeypatch.setattr(
+        generator,
+        "find_second_solution",
+        lambda *a, **k: SearchResult(Outcome.FOUND, square.copy(), None),
+    )
+    monkeypatch.setattr(
+        generator,
+        "solve_gated",
+        lambda rows, cols, **k: SolveResult(
+            Status.STALLED, np.full((6, 6), 0, dtype=np.int8)
+        ),
+    )
+    with pytest.raises(GenerationError) as info:
+        generate(checker_image(), 0.5, seed=0)
+    assert info.value.reason is FailureReason.NO_CANDIDATES
+    assert info.value.flipped_cells == 4 and info.value.iterations == 5
+
+
+@pytest.mark.parametrize(
+    "kwargs, message",
+    [
+        ({"max_iterations": 0}, "at least 1"),
+        ({"max_iterations": 2.5}, "integer"),
+        ({"max_iterations": True}, "integer"),
+        ({"time_budget": 0}, "greater than 0"),
+        ({"time_budget": float("nan")}, "greater than 0"),
+    ],
+)
+def test_bad_limits_rejected(kwargs, message):
+    with pytest.raises(ValueError, match=message):
+        generate(checker_image(), 0.5, **kwargs)
+
+
+# Warnings
+
+
+def generated(flips: int, size: int = 20) -> Generated:
+    original = np.zeros((size, size), bool)
+    solution = original.copy()
+    solution.flat[:flips] = True
+    solve_result = SolveResult(Status.SOLVED, solution.astype(np.int8))
+    return Generated(solution, original, (), 1, solve_result)
+
+
+@pytest.mark.parametrize("flips", [0, 1, 19, 20])
+def test_no_warning_at_or_under_5_percent(flips):
+    assert generated(flips).warning is None
+
+
+@pytest.mark.parametrize("flips", [21, 40, 400])
+def test_warning_over_5_percent(flips):
+    warning = generated(flips).warning
+    assert (
+        warning is not None and f"{flips} of 400 cells" in warning and ADVICE in warning
+    )
+
+
+def test_warning_text_and_percentage():
+    result = generated(21)
+    assert result.flipped_pct == pytest.approx(5.25)
+    assert result.warning.startswith("21 of 400 cells (5.2%) were changed")
+    # Non-square grids use the full cell count.
+    original = np.zeros((10, 30), bool)
+    solution = original.copy()
+    solution.flat[:16] = True
+    result = Generated(solution, original, (), 1, SolveResult(Status.SOLVED, solution))
+    assert result.flipped_pct == pytest.approx(16 / 3)
+    assert "16 of 300 cells (5.3%)" in result.warning
+
+
+def test_generate_warns_only_past_5_percent():
+    # One flip in a 6x6 grid is 2.8%: no warning.
+    assert generate(checker_image(), 0.5, seed=0).warning is None
+    # The same pattern in a 4x4 grid needs one flip out of 16 cells, 6.25%.
+    small = np.full((4, 4), 0.9)
+    small[1, 1], small[2, 2] = 0.45, 0.1
+    result = generate(small, 0.5, seed=0)
+    assert result.flipped_count == 1
+    assert result.warning.startswith("1 of 16 cells (6.2%)")
