@@ -212,7 +212,7 @@ The solver must never make a wrong deduction, so most testing effort goes there.
 
 ## Open questions
 
-- [ ] Is depth-2 probing affordable at 80×80 in Python, or should Expert be capped to smaller grids? Answered by the first benchmark.
+- [x] Is depth-2 probing affordable at 80×80 in Python, or should Expert be capped to smaller grids? Answered by the first benchmark: only when depth 1 leaves few unknown cells, so gate depth 2 on that count rather than capping by grid size (see `benchmarks/RESULTS.md`).
 - [ ] Should the minimum readable PDF cell size block export or only warn?
 - [ ] Is 4 flips per iteration the right batch size, or should it scale with grid size?
 - [ ] Which puzzles make up the known-puzzle test corpus? Hand-built cases are enough to start.
