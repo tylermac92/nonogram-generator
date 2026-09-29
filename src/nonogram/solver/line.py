@@ -160,17 +160,9 @@ def _leftmost(clue: Sequence[int], cells: Sequence[int]) -> list[int] | None:
         empties[i + 1] = empties[i] + (cell == EMPTY)
         filleds[i + 1] = filleds[i] + (cell == FILLED)
 
-    def block_fits(b: int, s: int) -> bool:
-        # Block covers no EMPTY cell and is not directly followed by a FILLED one.
-        end = s + b
-        return (
-            end <= n
-            and empties[end] == empties[s]
-            and (end == n or cells[end] != FILLED)
-        )
-
-    def after(b: int, s: int) -> int:
-        return min(s + b + 1, n)
+    # fits(b, s): a block of b at s covers no EMPTY cell and is not directly
+    # followed by a FILLED one; the cell after it (if any) is its gap, so the
+    # next block may start at s + b + 1. Inlined below: this is a hot loop.
 
     # feasible[j][i]: blocks j.. can be placed in cells[i:], leaving no FILLED
     # cell uncovered. Filled right to left, one block at a time.
@@ -181,9 +173,13 @@ def _leftmost(clue: Sequence[int], cells: Sequence[int]) -> list[int] | None:
         b = clue[j]
         row, next_row = feasible[j], feasible[j + 1]
         for i in range(n - 1, -1, -1):
-            row[i] = (block_fits(b, i) and next_row[after(b, i)]) or (
-                cells[i] != FILLED and row[i + 1]
-            )
+            end = i + b
+            if cells[i] != FILLED and row[i + 1]:
+                row[i] = True
+            elif end < n:
+                row[i] = empties[end] == empties[i] and cells[end] != FILLED and next_row[end + 1]
+            elif end == n:
+                row[i] = empties[n] == empties[i] and next_row[n]
 
     if not feasible[0][0]:
         return None
@@ -193,11 +189,18 @@ def _leftmost(clue: Sequence[int], cells: Sequence[int]) -> list[int] | None:
     starts = []
     pos = 0
     for j, b in enumerate(clue):
+        next_row = feasible[j + 1]
         s = pos
-        while not (block_fits(b, s) and feasible[j + 1][after(b, s)]):
+        while True:
+            end = s + b
+            if end < n:
+                if empties[end] == empties[s] and cells[end] != FILLED and next_row[end + 1]:
+                    break
+            elif end == n and empties[n] == empties[s] and next_row[n]:
+                break
             s += 1
         starts.append(s)
-        pos = after(b, s)
+        pos = min(s + b + 1, n)
     return starts
 
 
