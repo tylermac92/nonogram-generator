@@ -6,8 +6,10 @@ import os
 import warnings
 from dataclasses import dataclass
 
+import numpy as np
 from PIL import Image, ImageOps, UnidentifiedImageError
 
+MIN_SIDE, MAX_SIDE = 5, 80
 MAX_BYTES = 20 * 1024 * 1024
 FORMATS = ("PNG", "JPEG", "GIF", "WEBP", "BMP")
 FORMAT_NAMES = "PNG, JPEG, GIF, WebP, or BMP"
@@ -18,7 +20,8 @@ _ALPHA_MODES = {"RGBA", "RGBa", "LA", "La", "PA"}
 
 
 class ImageError(ValueError):
-    """The image can't be used: wrong format, too large, corrupt, or a bad crop."""
+    """The image or its settings can't be used: wrong format, too large,
+    corrupt, a bad crop, or a grid size or adjustment out of range."""
 
 
 @dataclass(frozen=True)
@@ -82,6 +85,87 @@ def crop(image: Image.Image, box: tuple[int, int, int, int] | list[int]) -> Imag
             f"0 <= left < right <= {width} and 0 <= top < bottom <= {height}."
         )
     return image.crop((left, top, right, bottom))
+
+
+def grayscale(image: Image.Image) -> np.ndarray:
+    """Luminance as a ``uint8`` array of shape (height, width), via Pillow mode ``L``."""
+    return np.asarray(image.convert("L"))
+
+
+def adjust(values: np.ndarray, gamma: float = 1.0, contrast: float = 1.0) -> np.ndarray:
+    """Apply gamma, then contrast, to brightness values in 0–1.
+
+    Gamma raises each value to ``1 / gamma``, so gamma above 1 brightens the
+    midtones and below 1 darkens them. Contrast scales the distance from
+    mid-gray (0.5), clipping to 0–1. A setting of exactly 1.0 is skipped, so
+    the defaults return the values unchanged.
+    """
+    _check_positive("Gamma", gamma, allow_zero=False)
+    _check_positive("Contrast", contrast, allow_zero=True)
+    out = np.asarray(values, dtype=np.float64)
+    if gamma != 1.0:
+        out = out ** (1.0 / gamma)
+    if contrast != 1.0:
+        out = np.clip(0.5 + (out - 0.5) * contrast, 0.0, 1.0)
+    return out
+
+
+def downsample(values: np.ndarray, rows: int, cols: int) -> np.ndarray:
+    """Box-filter a (height, width) array to (rows, cols).
+
+    Each cell is the area-weighted mean of the source pixels it covers,
+    counting pixels split by a cell boundary in proportion to their overlap.
+    """
+    height, width = values.shape
+    row_weights, col_weights = _box_weights(height, rows), _box_weights(width, cols)
+    return row_weights @ np.asarray(values, dtype=np.float64) @ col_weights.T
+
+
+def brightness_grid(
+    image: Image.Image, rows: int, cols: int, *, gamma: float = 1.0, contrast: float = 1.0
+) -> np.ndarray:
+    """Cell brightness in 0–1 (0 black, 1 white), shape (rows, cols).
+
+    Converts to luminance, applies gamma and contrast to the full-resolution
+    pixels, then box-filters down to the grid. Works in bands of source rows
+    so a large photo never needs a full-resolution float copy.
+    """
+    for name, side in (("Rows", rows), ("Columns", cols)):
+        if isinstance(side, bool) or not isinstance(side, (int, np.integer)):
+            raise ImageError(f"{name} must be an integer, got {side!r}.")
+        if not MIN_SIDE <= side <= MAX_SIDE:
+            raise ImageError(f"{name} must be between {MIN_SIDE} and {MAX_SIDE}, got {side}.")
+    # Luminance has only 256 levels, so the tone curve is a lookup table.
+    curve = adjust(np.arange(256) / 255.0, gamma, contrast)
+    gray = grayscale(image)
+    height, width = gray.shape
+    row_weights, col_weights = _box_weights(height, rows), _box_weights(width, cols)
+    band = max(1, _BAND_PIXELS // width)
+    reduced = np.zeros((rows, width))
+    for start in range(0, height, band):
+        stop = min(start + band, height)
+        reduced += row_weights[:, start:stop] @ curve[gray[start:stop]]
+    return reduced @ col_weights.T
+
+
+_BAND_PIXELS = 1 << 22  # about 32 MB of float64 per band
+
+
+def _box_weights(pixels: int, cells: int) -> np.ndarray:
+    """A (cells, pixels) matrix whose rows average each cell's span of pixels."""
+    edges = np.linspace(0.0, pixels, cells + 1)
+    starts = np.arange(pixels)
+    overlap = np.minimum(starts + 1, edges[1:, None]) - np.maximum(starts, edges[:-1, None])
+    weights = np.clip(overlap, 0.0, None)
+    return weights / weights.sum(axis=1, keepdims=True)
+
+
+def _check_positive(name: str, value: float, *, allow_zero: bool) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
+        raise ImageError(f"{name} must be a finite number, got {value!r}.")
+    if value < 0 or (value == 0 and not allow_zero):
+        bound = "at least 0" if allow_zero else "greater than 0"
+        raise ImageError(f"{name} must be {bound}, got {value}.")
 
 
 def _read(source: bytes | str | os.PathLike) -> bytes:
