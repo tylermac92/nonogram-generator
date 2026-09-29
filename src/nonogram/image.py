@@ -10,6 +10,8 @@ import numpy as np
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 MIN_SIDE, MAX_SIDE = 5, 80
+# Fill fractions outside this range make poor puzzles and get a warning.
+MIN_FILL, MAX_FILL = 0.05, 0.95
 MAX_BYTES = 20 * 1024 * 1024
 FORMATS = ("PNG", "JPEG", "GIF", "WEBP", "BMP")
 FORMAT_NAMES = "PNG, JPEG, GIF, WebP, or BMP"
@@ -174,6 +176,38 @@ def otsu_threshold(grid: np.ndarray) -> float:
     between = dark_count * light_count * (dark_sum / dark_count - light_sum / light_count) ** 2
     k = int(np.argmax(between))
     return float((levels[k] + levels[k + 1]) / 2)
+
+
+def threshold_grid(grid: np.ndarray, threshold: float, invert: bool = False) -> np.ndarray:
+    """Turn a brightness grid into a solution grid (``True`` = filled).
+
+    A cell is filled when its brightness is below ``threshold``. ``invert``
+    is for light-on-dark images: it fills exactly the cells that would
+    otherwise be empty, i.e. those at or above the threshold.
+    """
+    values = np.asarray(grid, dtype=np.float64)
+    if values.ndim != 2 or values.size == 0 or not np.isfinite(values).all():
+        raise ImageError("Brightness grid must be a non-empty 2-D array of finite values.")
+    if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not 0 <= threshold <= 1:
+        raise ImageError(f"Threshold must be a number from 0 to 1, got {threshold!r}.")
+    filled = values < threshold
+    return ~filled if invert else filled
+
+
+def fill_warning(solution: np.ndarray) -> str | None:
+    """A warning when under 5% or over 95% of cells are filled, else ``None``."""
+    fill = float(np.mean(solution))
+    if fill < MIN_FILL:
+        return (
+            f"Only {fill:.1%} of cells are filled; puzzles under {MIN_FILL:.0%} are nearly "
+            "empty. Try raising the threshold or toggling invert."
+        )
+    if fill > MAX_FILL:
+        return (
+            f"{fill:.1%} of cells are filled; puzzles over {MAX_FILL:.0%} are nearly solid. "
+            "Try lowering the threshold or toggling invert."
+        )
+    return None
 
 
 _BAND_PIXELS = 1 << 22  # about 32 MB of float64 per band
