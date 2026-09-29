@@ -18,9 +18,11 @@ from nonogram.image import (
     brightness_grid,
     crop,
     downsample,
+    fill_warning,
     grayscale,
     load_image,
     otsu_threshold,
+    threshold_grid,
 )
 
 ORIENTATION = 0x0112
@@ -492,3 +494,91 @@ def test_single_tone_grid_gets_the_neutral_default():
 def test_threshold_rejects_empty_or_non_finite_grids(grid):
     with pytest.raises(ImageError):
         otsu_threshold(grid)
+
+
+# --- thresholding and invert ---------------------------------------------------------
+
+
+def test_cells_below_the_threshold_are_filled():
+    grid = np.array([[0.0, 0.3, 0.49], [0.5, 0.51, 1.0]])
+    solution = threshold_grid(grid, 0.5)
+    assert solution.dtype == bool
+    assert solution.tolist() == [[True, True, True], [False, False, False]]
+
+
+def test_invert_reverses_the_fill():
+    grid = np.array([[0.0, 0.3, 0.49], [0.5, 0.51, 1.0]])
+    assert threshold_grid(grid, 0.5, invert=True).tolist() == [
+        [False, False, False],
+        [True, True, True],
+    ]
+
+
+@given(
+    grid=hnp.arrays(np.float64, st.tuples(st.integers(1, 20), st.integers(1, 20)),
+                    elements=st.floats(0, 1)),
+    threshold=st.floats(0, 1),
+)
+def test_invert_is_the_exact_complement(grid, threshold):
+    normal, inverted = threshold_grid(grid, threshold), threshold_grid(grid, threshold, invert=True)
+    assert np.array_equal(normal, grid < threshold)
+    assert np.array_equal(inverted, ~normal)
+
+
+def test_threshold_ends_fill_nothing_or_everything():
+    grid = np.linspace(0, 1, 25).reshape(5, 5)
+    assert not threshold_grid(grid, 0.0).any()  # nothing is below 0
+    assert threshold_grid(grid, 1.0).sum() == 24  # pure white stays empty
+    assert threshold_grid(grid, 0.0, invert=True).all()
+
+
+def test_otsu_threshold_splits_a_two_tone_picture():
+    # End to end: a dark square on white fills the square; invert fills the rest.
+    im = Image.new("L", (500, 500), 255)
+    im.paste(0, (100, 100, 300, 300))
+    grid = brightness_grid(im.convert("RGB"), 10, 10)
+    solution = threshold_grid(grid, otsu_threshold(grid))
+    assert solution[2:6, 2:6].all() and solution.sum() == 16
+    assert threshold_grid(grid, otsu_threshold(grid), invert=True).sum() == 84
+
+
+@pytest.mark.parametrize(
+    "threshold", [-0.1, 1.5, float("nan"), float("inf"), "0.5", None, True]
+)
+def test_rejects_bad_thresholds(threshold):
+    with pytest.raises(ImageError, match="Threshold"):
+        threshold_grid(np.full((5, 5), 0.5), threshold)
+
+
+@pytest.mark.parametrize("grid", [np.empty((0, 5)), np.zeros(5), np.array([[0.1, np.nan]])])
+def test_threshold_rejects_bad_grids(grid):
+    with pytest.raises(ImageError, match="Brightness grid"):
+        threshold_grid(grid, 0.5)
+
+
+def fill_of(filled: int, total: int = 400) -> np.ndarray:
+    solution = np.zeros(total, dtype=bool)
+    solution[:filled] = True
+    return solution.reshape(20, total // 20)
+
+
+@pytest.mark.parametrize("filled", [0, 1, 19])  # 0%, 0.25%, 4.75%
+def test_warns_when_under_5_percent_filled(filled):
+    warning = fill_warning(fill_of(filled))
+    assert warning is not None and "nearly empty" in warning
+
+
+@pytest.mark.parametrize("filled", [381, 399, 400])  # 95.25%, 99.75%, 100%
+def test_warns_when_over_95_percent_filled(filled):
+    warning = fill_warning(fill_of(filled))
+    assert warning is not None and "nearly solid" in warning
+
+
+@pytest.mark.parametrize("filled", [20, 200, 380])  # exactly 5%, 50%, exactly 95%
+def test_no_warning_between_5_and_95_percent(filled):
+    assert fill_warning(fill_of(filled)) is None
+
+
+def test_warning_reports_the_fill():
+    assert "Only 0.5% of cells" in fill_warning(fill_of(2))
+    assert "99.5% of cells" in fill_warning(fill_of(398))
