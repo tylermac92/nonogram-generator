@@ -1,10 +1,31 @@
+import itertools
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 from hypothesis.extra.numpy import arrays
 
-from nonogram.generator import FlipWeights, flip_costs
+import nonogram.generator as generator
+from nonogram.clues import derive_clues
+from nonogram.generator import (
+    MAX_FLIPS,
+    MIN_FLIP_SPACING,
+    FlipWeights,
+    GenerationError,
+    flip_candidates,
+    flip_costs,
+    generate,
+    pick_batch,
+    solve_gated,
+)
+from nonogram.image import threshold_grid
+from nonogram.solver.line import UNKNOWN
+from nonogram.solver.probe import solve
+from nonogram.solver.propagate import Status
+from nonogram.solver.search import Outcome, SearchResult
 
 NO_NOISE = FlipWeights(epsilon=0.0)
 
@@ -257,3 +278,270 @@ def test_integer_solution_accepted():
 def test_bad_input_rejected(brightness, solution, threshold, message):
     with pytest.raises(ValueError, match=message):
         flip_costs(brightness, solution, threshold)
+
+
+# Flip loop
+
+
+def is_unique(solution: np.ndarray) -> bool:
+    """Whether logic alone (sound, so SOLVED means unique) solves the clues."""
+    empty = np.full(solution.shape, UNKNOWN, dtype=np.int8)
+    return solve(empty, *derive_clues(solution)).status is Status.SOLVED
+
+
+def chebyshev(a: tuple[int, int], b: tuple[int, int]) -> int:
+    return max(abs(a[0] - b[0]), abs(a[1] - b[1]))
+
+
+def checker_image() -> np.ndarray:
+    """Two dark cells on a diagonal: the classic two-solution 2x2 pattern.
+
+    (2, 2) is barely darker than the threshold, so it's the cheap one.
+    """
+    brightness = np.full((6, 6), 0.9)
+    brightness[2, 2] = 0.45
+    brightness[3, 3] = 0.1
+    return brightness
+
+
+NOISE = [np.random.default_rng(seed).random((10, 10)) for seed in range(8)]
+
+
+def test_unique_image_needs_no_flips():
+    brightness = np.full((8, 8), 0.9)
+    brightness[2:5, 1:6] = 0.1
+    result = generate(brightness, 0.5, seed=0)
+    assert result.iterations == 1 and result.batches == ()
+    assert np.array_equal(result.solution, result.original)
+    assert result.flipped_count == 0 and result.solve.status is Status.SOLVED
+
+
+def test_ambiguous_image_flips_the_cheapest_diff_cell():
+    result = generate(checker_image(), 0.5, seed=0)
+    assert result.batches == (((2, 2),),)
+    assert result.iterations == 2
+    expected = np.zeros((6, 6), bool)
+    expected[3, 3] = True
+    assert np.array_equal(result.solution, expected)
+    assert is_unique(result.solution)
+
+
+def test_invert_thresholds_the_other_way():
+    brightness = 1 - checker_image()
+    result = generate(brightness, 0.5, invert=True, seed=0)
+    assert np.array_equal(result.original, threshold_grid(brightness, 0.5, invert=True))
+    assert is_unique(result.solution)
+
+
+@pytest.mark.parametrize("index", range(len(NOISE)))
+def test_loop_invariants_on_noise(index, monkeypatch):
+    brightness = NOISE[index]
+    solves, searches = [], []
+    real_solve, real_search = generator.solve, generator.find_second_solution
+
+    def recording_solve(grid, *args, **kwargs):
+        solves.append((grid.copy(), kwargs["max_depth"]))
+        return real_solve(grid, *args, **kwargs)
+
+    def recording_search(stalled, *args, **kwargs):
+        result = real_search(stalled, *args, **kwargs)
+        searches.append((stalled.copy(), result))
+        return result
+
+    monkeypatch.setattr(generator, "solve", recording_solve)
+    monkeypatch.setattr(generator, "find_second_solution", recording_search)
+    result = generate(brightness, 0.5, seed=index)
+
+    assert is_unique(result.solution)
+    assert result.iterations == len(result.batches) + 1 == len(searches) + 1
+    # Every iteration starts its solve from an empty grid.
+    first_stage = [grid for grid, depth in solves if depth == 1]
+    assert len(first_stage) == result.iterations
+    assert all((grid == UNKNOWN).all() for grid in first_stage)
+    # At most 4 cells per batch, spaced at least 4 apart.
+    for batch in result.batches:
+        assert 1 <= len(batch) <= MAX_FLIPS
+        assert all(
+            chebyshev(a, b) >= MIN_FLIP_SPACING
+            for a, b in itertools.combinations(batch, 2)
+        )
+    # No cell is flipped twice, so none is ever flipped back.
+    cells = [cell for batch in result.batches for cell in batch]
+    assert len(cells) == len(set(cells)) == result.flipped_count
+    flipped = np.zeros_like(result.flipped)
+    for r, c in cells:
+        flipped[r, c] = True
+    assert np.array_equal(flipped, result.flipped)
+    # Each batch comes from the search's preferred cells when it found a
+    # second solution (and some are still unflipped), else the stall's unknowns.
+    done = np.zeros_like(flipped)
+    for batch, (stalled, search) in zip(result.batches, searches):
+        preferred = (
+            search.candidates & ~done if search.outcome is Outcome.FOUND else None
+        )
+        pool = (
+            preferred
+            if preferred is not None and preferred.any()
+            else stalled == UNKNOWN
+        )
+        assert all(pool[r, c] and not done[r, c] for r, c in batch)
+        for r, c in batch:
+            done[r, c] = True
+
+
+def test_same_seed_same_puzzle_and_seeds_vary():
+    brightness = NOISE[0]
+    first = generate(brightness, 0.5, seed=3)
+    again = generate(brightness, 0.5, seed=3)
+    assert (
+        np.array_equal(first.solution, again.solution)
+        and first.batches == again.batches
+    )
+    # A symmetric checker ties its two dark cells: the seed picks which goes.
+    symmetric = checker_image()
+    symmetric[2, 2] = 0.1
+    batches = {generate(symmetric, 0.5, seed=s).batches for s in range(10)}
+    assert batches == {(((2, 2),),), (((3, 3),),)}
+
+
+def test_flip_candidates_prefers_second_solution_diff():
+    stalled = np.full((4, 4), UNKNOWN, dtype=np.int8)
+    stalled[0] = 1
+    diff = np.zeros((4, 4), bool)
+    diff[1, 1] = diff[2, 2] = True
+    flipped = np.zeros((4, 4), bool)
+    found = SearchResult(Outcome.FOUND, diff, np.zeros((4, 4), bool))
+    assert np.array_equal(flip_candidates(found, stalled, flipped), diff)
+    # A diff cell already flipped is never eligible again.
+    flipped[1, 1] = True
+    assert np.array_equal(flip_candidates(found, stalled, flipped), diff & ~flipped)
+
+
+@pytest.mark.parametrize("outcome", [Outcome.TIMED_OUT, Outcome.UNIQUE, Outcome.FOUND])
+def test_flip_candidates_falls_back_to_unknown_cells(outcome):
+    stalled = np.full((4, 4), UNKNOWN, dtype=np.int8)
+    stalled[0] = 1
+    flipped = np.zeros((4, 4), bool)
+    flipped[3, 3] = True
+    if outcome is Outcome.FOUND:
+        # Every cell the second solution changes has been flipped already.
+        search = SearchResult(outcome, flipped.copy(), np.zeros((4, 4), bool))
+    else:
+        search = SearchResult(outcome, stalled == UNKNOWN)
+    expected = (stalled == UNKNOWN) & ~flipped
+    assert np.array_equal(flip_candidates(search, stalled, flipped), expected)
+
+
+def test_loop_uses_unknown_cells_when_search_finds_nothing(monkeypatch):
+    stalls = []
+
+    def no_second(stalled, *args, **kwargs):
+        stalls.append(stalled.copy())
+        return SearchResult(Outcome.TIMED_OUT, stalled == UNKNOWN)
+
+    monkeypatch.setattr(generator, "find_second_solution", no_second)
+    result = generate(NOISE[1], 0.5, seed=0)
+    assert is_unique(result.solution)
+    for batch, stalled in zip(result.batches, stalls):
+        assert all(stalled[r, c] == UNKNOWN for r, c in batch)
+
+
+def naive_batch(costs, eligible, max_flips, spacing):
+    cells = sorted(zip(*np.nonzero(eligible)), key=lambda rc: (costs[rc], rc))
+    batch = []
+    for r, c in cells:
+        if len(batch) < max_flips and all(
+            chebyshev((r, c), b) >= spacing for b in batch
+        ):
+            batch.append((int(r), int(c)))
+    return tuple(batch)
+
+
+@given(
+    costs=arrays(np.float64, (9, 9), elements=st.floats(0, 1)),
+    eligible=arrays(bool, (9, 9)),
+    max_flips=st.integers(1, 6),
+    spacing=st.integers(1, 5),
+)
+def test_pick_batch_is_greedy_cheapest_with_spacing(
+    costs, eligible, max_flips, spacing
+):
+    batch = pick_batch(costs, eligible, max_flips, spacing)
+    assert batch == naive_batch(costs, eligible, max_flips, spacing)
+    assert len(batch) <= max_flips and all(eligible[cell] for cell in batch)
+    assert all(chebyshev(a, b) >= spacing for a, b in itertools.combinations(batch, 2))
+    if eligible.any():
+        cheapest = costs[eligible].min()
+        assert batch and costs[batch[0]] == cheapest
+    if len(batch) < max_flips:
+        # Every eligible cell left out is too close to one taken.
+        for cell in zip(*np.nonzero(eligible)):
+            assert cell in batch or any(chebyshev(cell, b) < spacing for b in batch)
+
+
+def test_pick_batch_defaults():
+    batch = pick_batch(np.zeros((12, 12)), np.ones((12, 12), bool))
+    assert batch == ((0, 0), (0, 4), (0, 8), (4, 0))
+
+
+# Depth-2 gate
+
+STAIRS_KINKED = next(
+    e
+    for e in json.loads(
+        (Path(__file__).parent / "corpus" / "puzzles.json").read_text()
+    )["puzzles"]
+    if e["name"] == "stairs-kinked"
+)
+STAIRS = np.array([[ch == "1" for ch in row] for row in STAIRS_KINKED["solution"]])
+
+
+def test_depth2_skipped_above_the_unknown_limit():
+    # Depth 1 stalls on this unique expert puzzle with 61 unknown cells.
+    result = solve_gated(*derive_clues(STAIRS))
+    assert result.status is Status.STALLED
+    assert int((result.grid == UNKNOWN).sum()) == 61 and result.probe2_cells == 0
+
+
+def test_depth2_runs_within_the_unknown_limit():
+    depth1 = solve_gated(*derive_clues(STAIRS), depth2_max_unknown=0)
+    result = solve_gated(*derive_clues(STAIRS), depth2_max_unknown=61)
+    assert result.status is Status.SOLVED and result.probe2_cells > 0
+    # Counts cover both stages.
+    assert result.probe1_cells >= depth1.probe1_cells
+    assert result.simple_cells >= depth1.simple_cells
+    total = (
+        result.simple_cells
+        + result.full_cells
+        + result.probe1_cells
+        + result.probe2_cells
+    )
+    assert total == STAIRS.size
+
+
+def test_generate_passes_the_gate_through():
+    brightness = np.where(STAIRS, 0.1, 0.9)
+    result = generate(brightness, 0.5, seed=0, depth2_max_unknown=61)
+    assert result.flipped_count == 0 and result.solve.probe2_cells > 0
+
+
+# Failure
+
+
+def test_iteration_limit():
+    with pytest.raises(GenerationError, match="within 1 iterations"):
+        generate(checker_image(), 0.5, seed=0, max_iterations=1)
+
+
+def test_time_limit():
+    ticks = itertools.count(step=100)
+    with pytest.raises(GenerationError, match="within 120 seconds"):
+        generate(checker_image(), 0.5, seed=0, clock=lambda: next(ticks))
+
+
+def test_no_eligible_candidates(monkeypatch):
+    monkeypatch.setattr(
+        generator, "flip_candidates", lambda s, g, f: np.zeros(g.shape, bool)
+    )
+    with pytest.raises(GenerationError, match="already been flipped"):
+        generate(checker_image(), 0.5, seed=0)

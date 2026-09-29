@@ -87,7 +87,7 @@ Any deduction returns control to propagation. **Depth-2 probing** allows depth-1
 
 ### Acceptance and search
 
-A puzzle is **accepted** when propagation plus probing up to depth 2 solves it completely. Otherwise it has **stalled**, and the solver returns the grid's remaining unknown cells.
+A puzzle is **accepted** when propagation plus probing up to depth 2 solves it completely. Depth 2 runs only when depth 1 stalls with at most 50 unknown cells (see `benchmarks/RESULTS.md`): its cost follows that count, and a count gate, unlike a time budget, gives the same result on every machine. Otherwise it has **stalled**, and the solver returns the grid's remaining unknown cells.
 
 On a stall, a depth-first search with propagation looks for a second solution: it tries unknown cells in turn, forcing each to the opposite of its target value and searching. A cell whose forced value leads to no solution is skipped, and the next is tried. If it finds one, the cells where the two solutions differ are the true source of ambiguity and become the preferred flip candidates. The search has a time budget (2 seconds to start); if it runs out, all unknown cells at the stall are used as candidates instead.
 
