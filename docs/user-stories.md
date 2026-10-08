@@ -28,11 +28,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] An empty row produces the clue "0" (an empty run list displayed as 0).
-- [ ] A fully filled row of width *w* produces the single clue *w*.
-- [ ] A row such as `1101110` produces clues 2 3; tests also cover separated, adjacent-to-edge, and single-cell runs.
-- [ ] 1x1, 5x5, non-square (e.g. 37x22), and 50x50 grids all generate clues correctly.
-- [ ] Grids are stored row-major in a `Uint8Array`, and the module has no React imports.
+- [x] An empty row produces the clue "0" (an empty run list displayed as 0).
+- [x] A fully filled row of width *w* produces the single clue *w*.
+- [x] A row such as `1101110` produces clues 2 3; tests also cover separated, adjacent-to-edge, and single-cell runs.
+- [x] 1x1, 5x5, non-square (e.g. 37x22), and 50x50 grids all generate clues correctly.
+- [x] Grids are stored row-major in a `Uint8Array`, and the module has no React imports.
 
 ### M3. Line solver
 
