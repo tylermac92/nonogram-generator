@@ -9,7 +9,7 @@ Plan for the first user story in `docs/user-stories.md`:
 | Topic | Choice | Why |
 | --- | --- | --- |
 | Static host | GitHub Pages, deployed by GitHub Actions | Repo already lives on GitHub; one workflow does CI and deploy, no extra account |
-| Starting point | `npm create vite@latest -- --template react-ts` | Gives React + TS + strict tsconfig + ESLint flat config for free; we only add what's missing |
+| Starting point | `npm create vite@latest -- --template react-ts` | Gives React + TS for free. The current template ships oxlint instead of ESLint, so we swap it for ESLint per the spec |
 | Node | 22 LTS, pinned in `.nvmrc` and CI | Matches the dev container |
 | Test runner | Vitest, configured inside `vite.config.ts` | One config file; spec names Vitest |
 | Formatting | Prettier + `eslint-config-prettier` | Keeps ESLint and Prettier from fighting |
@@ -51,9 +51,9 @@ Sub-folders (`core/image`, `core/puzzle`, …) are created by the milestones tha
 
 ### 5. ESLint and Prettier
 
-- Keep the template's `eslint.config.js` (typescript-eslint, react-hooks, react-refresh).
+- The template now ships oxlint; replace it with an `eslint.config.js` (flat config: `@eslint/js`, typescript-eslint, react-hooks, react-refresh).
 - `npm i -D prettier eslint-config-prettier`; append the prettier config last in `eslint.config.js`.
-- Add `.prettierrc` (`{ "singleQuote": true }` or whatever the owner prefers) and `.prettierignore` (`dist`, `coverage`).
+- Add `.prettierrc` (`{ "singleQuote": true }` or whatever the owner prefers) and `.prettierignore` (`dist`, `coverage`, `package-lock.json`, `docs` — hand-written docs are left as authored).
 - Add a `no-restricted-imports` rule scoped to `src/core/**` that bans `react` and `react-dom`, enforcing the "core never imports React" rule from the spec.
 
 ### 6. npm scripts
