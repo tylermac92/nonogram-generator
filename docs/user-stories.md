@@ -14,11 +14,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] `npm run dev` starts the app locally and `npm run build` produces a static bundle with no errors.
-- [ ] `npm test` runs Vitest, and at least one placeholder test passes.
-- [ ] Lint and type-check run in CI on every push and fail the build on errors.
-- [ ] A push to the main branch deploys automatically, and the live URL loads the app.
-- [ ] TypeScript strict mode is on.
+- [x] `npm run dev` starts the app locally and `npm run build` produces a static bundle with no errors.
+- [x] `npm test` runs Vitest, and at least one placeholder test passes.
+- [x] Lint and type-check run in CI on every push and fail the build on errors.
+- [x] A push to the main branch deploys automatically, and the live URL loads the app.
+- [x] TypeScript strict mode is on.
 
 ### M2. Grid and clue generation
 
@@ -28,11 +28,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] An empty row produces the clue "0" (an empty run list displayed as 0).
-- [ ] A fully filled row of width *w* produces the single clue *w*.
-- [ ] A row such as `1101110` produces clues 2 3; tests also cover separated, adjacent-to-edge, and single-cell runs.
-- [ ] 1x1, 5x5, non-square (e.g. 37x22), and 50x50 grids all generate clues correctly.
-- [ ] Grids are stored row-major in a `Uint8Array`, and the module has no React imports.
+- [x] An empty row produces the clue "0" (an empty run list displayed as 0).
+- [x] A fully filled row of width *w* produces the single clue *w*.
+- [x] A row such as `1101110` produces clues 2 3; tests also cover separated, adjacent-to-edge, and single-cell runs.
+- [x] 1x1, 5x5, non-square (e.g. 37x22), and 50x50 grids all generate clues correctly.
+- [x] Grids are stored row-major in a `Uint8Array`, and the module has no React imports.
 
 ### M3. Line solver
 
