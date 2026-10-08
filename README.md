@@ -20,4 +20,6 @@ Requires Node 22 (see `.nvmrc`).
 | `npm run format:check` | Check formatting without writing       |
 | `npm run typecheck`    | Type-check only                        |
 
+`npm test` runs Node unit tests and browser tests (`*.browser.test.ts`) in headless Chromium. Install the browser once with `npx playwright install chromium`, or point at an existing one with `CHROMIUM_PATH=/path/to/chrome npm test`.
+
 Pushes to `main` deploy to GitHub Pages after CI passes.
