@@ -155,7 +155,7 @@ Seventeen small milestones in build order; each ends in something you can run or
 
 ### Phase 1 — Core logic (no UI)
 
-- [ ] **M1. Scaffold.** Vite + React + TS, Vitest, ESLint/Prettier, empty app deployed to your static host.
+- [x] **M1. Scaffold.** Vite + React + TS, Vitest, ESLint/Prettier, empty app deployed to your static host.
   - Done when: tests run in CI and the live URL loads.
 - [ ] **M2. Grid and clues.** `Grid` type and clue generation from a grid.
   - Done when: tests pass for an empty row ("0"), a full row, 1x1, and 50x50 grids.

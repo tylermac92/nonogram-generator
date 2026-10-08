@@ -14,11 +14,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] `npm run dev` starts the app locally and `npm run build` produces a static bundle with no errors.
-- [ ] `npm test` runs Vitest, and at least one placeholder test passes.
-- [ ] Lint and type-check run in CI on every push and fail the build on errors.
-- [ ] A push to the main branch deploys automatically, and the live URL loads the app.
-- [ ] TypeScript strict mode is on.
+- [x] `npm run dev` starts the app locally and `npm run build` produces a static bundle with no errors.
+- [x] `npm test` runs Vitest, and at least one placeholder test passes.
+- [x] Lint and type-check run in CI on every push and fail the build on errors.
+- [x] A push to the main branch deploys automatically, and the live URL loads the app.
+- [x] TypeScript strict mode is on.
 
 ### M2. Grid and clue generation
 
