@@ -42,11 +42,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] At least five known line-solvable puzzles (including a 50x50) come back fully solved and match their solutions.
-- [ ] A 2x2 grid with a diagonal pair is reported as stuck, with all four cells undetermined.
-- [ ] Clues that admit no solution return a contradiction status instead of crashing or looping.
-- [ ] A 50x50 puzzle solves in under 50 ms on a typical laptop, measured in a benchmark test.
-- [ ] The trace records the number of rounds and deductions per round.
+- [x] At least five known line-solvable puzzles (including a 50x50) come back fully solved and match their solutions.
+- [x] A 2x2 grid with a diagonal pair is reported as stuck, with all four cells undetermined.
+- [x] Clues that admit no solution return a contradiction status instead of crashing or looping.
+- [x] A 50x50 puzzle solves in under 50 ms on a typical laptop, measured in a benchmark test.
+- [x] The trace records the number of rounds and deductions per round.
 
 ### M4. Image pipeline
 

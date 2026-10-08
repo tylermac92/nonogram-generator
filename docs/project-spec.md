@@ -159,7 +159,7 @@ Seventeen small milestones in build order; each ends in something you can run or
   - Done when: tests run in CI and the live URL loads.
 - [x] **M2. Grid and clues.** `Grid` type and clue generation from a grid.
   - Done when: tests pass for an empty row ("0"), a full row, 1x1, and 50x50 grids.
-- [ ] **M3. Line solver.** Per-line DP, dirty-line queue, undetermined-cell list, trace.
+- [x] **M3. Line solver.** Per-line DP, dirty-line queue, undetermined-cell list, trace.
   - Done when: it solves several known line-solvable puzzles, reports a 2x2 diagonal as stuck, and solves a 50x50 in < 50 ms.
 - [ ] **M4. Image pipeline.** Decode, orientation, area-average downscale, grayscale, Otsu, invert, cleanup.
   - Done when: tests on synthetic images (a black square on white, a checkerboard) produce the expected grids.

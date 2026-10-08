@@ -63,7 +63,7 @@ interface SolveResult {
 - Start with every mask `UNKNOWN`, and every row then every column dirty.
 - For each dirty line: copy its masks into a scratch `Uint8Array` (row via `subarray`, column by stride), run `solveLine`, and compare to the old masks. For each cell that changed: write it back, count a deduction, and mark the crossing line dirty for the next round.
 - `solveLine` returning `false` → stop with `contradiction`. A contradiction always means the clues have no solution, because masks only lose bits that no valid placement uses.
-- Keep a count of cells still unknown; exit at 0 with `solved` (no trailing empty round). If a round ends with nothing dirty → `stuck`.
+- Keep a count of cells still unknown. A round that fixes nothing ends the solve: `solved` if no cells are unknown, else `stuck`. Once every cell is known, one last pass re-checks the lines changed in the final round, so clues that conflict only after the grid fills in still give `contradiction` (the deep check in M9 relies on this). That pass deduces nothing and isn't counted as a round.
 - Every round adds one entry to `deductions`, so `rounds === deductions.length`. A stuck puzzle's last entry is 0.
 
 ### 3. Shared test helper
