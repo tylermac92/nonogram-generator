@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { clueLabels, lineClues, makePuzzle } from './clues.ts';
 import { createGrid, gridColumn, gridFromRows, gridRow } from './grid.ts';
-import type { Grid, Puzzle } from './types.ts';
+import { randomGrid } from '../test-utils.ts';
+import type { Puzzle } from './types.ts';
 
 const runs = (...lengths: number[]) =>
   lengths.map((length) => ({ length, color: 1 }));
@@ -16,18 +17,6 @@ const oracle = (cells: ArrayLike<number>) =>
       .filter(Boolean)
       .map((s) => s.length),
   );
-
-function randomGrid(width: number, height: number, seed: number): Grid {
-  let s = seed;
-  return createGrid(
-    width,
-    height,
-    Uint8Array.from({ length: width * height }, () => {
-      s = (s * 1664525 + 1013904223) >>> 0;
-      return s >>> 31;
-    }),
-  );
-}
 
 function expectMatchesOracle(puzzle: Puzzle) {
   const { solution } = puzzle;
