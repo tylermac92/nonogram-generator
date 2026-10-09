@@ -12,6 +12,7 @@ import { makePuzzle } from '../core/puzzle/clues.ts';
 import { createGrid } from '../core/puzzle/grid.ts';
 import { gridHeight } from './layout.ts';
 import { Preview } from './Preview.tsx';
+import { useSolver } from './useSolver.ts';
 
 export function Creator() {
   const [image, setImage] = useState<RgbaImage | null>(null);
@@ -54,6 +55,8 @@ export function Creator() {
     [cleaned, invert],
   );
   const puzzle = useMemo(() => grid && makePuzzle(grid), [grid]);
+  const result = useSolver(puzzle);
+  const unknown = result?.undetermined.length ?? 0;
 
   const filled = grid
     ? grid.cells.reduce((sum, v) => sum + v, 0) / grid.cells.length
@@ -153,7 +156,19 @@ export function Creator() {
         {warning && <p>{warning}</p>}
       </div>
       {puzzle ? (
-        <Preview puzzle={puzzle} />
+        <>
+          <p
+            role="status"
+            className={`verdict ${result ? (result.status === 'solved' ? 'valid' : 'invalid') : ''}`}
+          >
+            {!result
+              ? 'Checking…'
+              : result.status === 'solved'
+                ? 'Valid — unique, solvable by logic'
+                : `Not line-solvable — ${unknown} ${unknown === 1 ? 'cell' : 'cells'} undetermined`}
+          </p>
+          <Preview puzzle={puzzle} undetermined={result?.undetermined} />
+        </>
       ) : (
         <div className="dropzone">Drop an image here or choose a file</div>
       )}

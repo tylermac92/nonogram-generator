@@ -168,7 +168,7 @@ Seventeen small milestones in build order; each ends in something you can run or
 
 - [x] **M5. Minimal creator.** Upload, width slider, cutoff slider, invert, canvas preview with clues.
   - Done when: dropping in an image shows a live-updating grid.
-- [ ] **M6. Worker and verdict.** Solver in a Web Worker with job ids and debouncing; verdict badge; undetermined-cell highlight.
+- [x] **M6. Worker and verdict.** Solver in a Web Worker with job ids and debouncing; verdict badge; undetermined-cell highlight.
   - Done when: dragging sliders on a 50x50 grid stays smooth and the badge updates.
 - [ ] **M7. Crop and sizing.** Crop box, square lock, presets, height derivation and clamping, brightness/contrast.
   - Done when: the 5–50 limits hold for very wide and very tall crops.

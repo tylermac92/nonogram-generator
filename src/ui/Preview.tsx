@@ -4,7 +4,13 @@ import type { Puzzle } from '../core/puzzle/types.ts';
 import { previewLayout } from './layout.ts';
 
 /** The grid with its clues, drawn on one canvas. */
-export function Preview({ puzzle }: { puzzle: Puzzle }) {
+export function Preview({
+  puzzle,
+  undetermined,
+}: {
+  puzzle: Puzzle;
+  undetermined?: number[];
+}) {
   const wrapper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [available, setAvailable] = useState(0);
@@ -18,8 +24,8 @@ export function Preview({ puzzle }: { puzzle: Puzzle }) {
   }, []);
 
   useEffect(
-    () => draw(canvas.current!, puzzle, available),
-    [puzzle, available],
+    () => draw(canvas.current!, puzzle, available, undetermined),
+    [puzzle, available, undetermined],
   );
 
   return (
@@ -33,7 +39,12 @@ export function Preview({ puzzle }: { puzzle: Puzzle }) {
   );
 }
 
-function draw(canvas: HTMLCanvasElement, puzzle: Puzzle, available: number) {
+function draw(
+  canvas: HTMLCanvasElement,
+  puzzle: Puzzle,
+  available: number,
+  undetermined: number[] = [],
+) {
   const { cell, clueCols, clueRows, width, height } = previewLayout(
     puzzle,
     available,
@@ -63,6 +74,16 @@ function draw(canvas: HTMLCanvasElement, puzzle: Puzzle, available: number) {
       );
     }
   });
+
+  ctx.fillStyle = 'rgba(255, 160, 0, 0.6)';
+  for (const i of undetermined) {
+    ctx.fillRect(
+      left + (i % w) * cell,
+      top + Math.floor(i / w) * cell,
+      cell,
+      cell,
+    );
+  }
 
   // Thin lines first, then a bold rule every 5 cells and the outer border on top.
   for (const major of [false, true]) {

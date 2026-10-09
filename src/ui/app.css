@@ -39,3 +39,20 @@ body {
   text-align: center;
   color: #555;
 }
+
+.verdict {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #eee;
+}
+
+.verdict.valid {
+  background: #d6f5dd;
+  color: #0b5a1f;
+}
+
+.verdict.invalid {
+  background: #fde0e0;
+  color: #8a1010;
+}
