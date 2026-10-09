@@ -73,12 +73,12 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] Dropping a supported image, or choosing one with the file picker, shows a grid preview within 1 second.
-- [ ] Moving the width slider (5–50) or the cutoff slider updates the preview while dragging, without visible lag.
-- [ ] The cutoff starts at the Otsu value, and Auto restores it after manual changes.
-- [ ] Invert swaps filled and empty cells in the preview and the clues.
-- [ ] Clues are readable at 50x50, with clue areas sized to the longest clue.
-- [ ] An unsupported file (for example HEIC or a PDF) shows a clear message suggesting JPEG or PNG.
+- [x] Dropping a supported image, or choosing one with the file picker, shows a grid preview within 1 second.
+- [x] Moving the width slider (5–50) or the cutoff slider updates the preview while dragging, without visible lag.
+- [x] The cutoff starts at the Otsu value, and Auto restores it after manual changes.
+- [x] Invert swaps filled and empty cells in the preview and the clues.
+- [x] Clues are readable at 50x50, with clue areas sized to the longest clue.
+- [x] An unsupported file (for example HEIC or a PDF) shows a clear message suggesting JPEG or PNG.
 
 ### M6. Solver worker and verdict
 

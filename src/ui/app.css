@@ -1,0 +1,41 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  color: #111;
+  background: #fff;
+}
+
+.creator {
+  box-sizing: border-box;
+  min-height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+}
+
+.controls input[type='range'] {
+  vertical-align: middle;
+}
+
+.error {
+  color: #b00020;
+}
+
+.preview {
+  overflow-x: auto;
+}
+
+.dropzone {
+  padding: 64px 16px;
+  border: 2px dashed #999;
+  border-radius: 8px;
+  text-align: center;
+  color: #555;
+}

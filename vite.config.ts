@@ -12,14 +12,18 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
-          exclude: [...configDefaults.exclude, '**/*.browser.test.ts'],
+          exclude: [...configDefaults.exclude, '**/*.browser.test.{ts,tsx}'],
         },
       },
       {
         extends: true,
+        // Pre-bundled up front: discovering these mid-run reloads the page and fails the run.
+        optimizeDeps: {
+          include: ['react', 'react/jsx-dev-runtime', 'react-dom/client'],
+        },
         test: {
           name: 'browser',
-          include: ['src/**/*.browser.test.ts'],
+          include: ['src/**/*.browser.test.{ts,tsx}'],
           browser: {
             enabled: true,
             headless: true,

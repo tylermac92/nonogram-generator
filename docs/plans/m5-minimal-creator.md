@@ -13,7 +13,7 @@ Plan for the fifth user story in `docs/user-stories.md`:
 | Height | `round(width × image height ÷ image width)`, clamped to 5–50 | The whole image is used in M5. M7 replaces this with crop-based sizing and a shrinking width maximum; until then, extreme aspect ratios get stretched |
 | Width | Slider 5–50, starting at 20 | 20 gives a recognizable first preview and is quick to solve |
 | Cutoff | State is `number \| null`; `null` means Auto. The slider shows `cutoff ?? otsu(values)`; moving it stores a number; the Auto button sets it back to `null` | Auto keeps following Otsu as the width changes, and a manual value stays put |
-| Cleanup | Always on (the spec's default); no toggle yet | No milestone asks for the toggle; it's one checkbox to add when someone needs it |
+| Cleanup | Always on (the spec's default); no toggle yet. Runs *before* invert: threshold without invert, cleanup, then complement the grid if Invert is on | No milestone asks for the toggle. Cleaning first makes Invert an exact swap; the spec's order (invert, then cleanup) could differ by a few border cells, because a border speck is removed but a border hole is never filled |
 | Fill warning | When more than 90% or less than 5% of cells are filled, show "Nearly all cells are filled/empty — the puzzle will be dull" | The spec asks for it, and the M4 plan deferred it to M5; one line of JSX |
 | Preview | One `<canvas>` sized to the clue areas plus the grid, scaled by `devicePixelRatio` so text stays crisp. Bold rule every 5 cells | The spec says canvas, not 2,500 DOM cells. The 5-cell rules make 50x50 grids countable |
 | Clue sizing | The left clue area is as wide as the longest row clue and the top area as tall as the longest column clue, one cell per number. Cell size = largest that fits the available width, never below 14 px; below that, the preview scrolls sideways | Readable at 50x50: 14 px cells with a 9 px font fit two-digit clues. The creator targets ≥ 1024 px screens (spec) |
@@ -68,7 +68,8 @@ const gray = useMemo(() => image && toGray(image), [image]);
 const height = gray ? gridHeight(gray.width, gray.height, width) : 0;
 const values = useMemo(() => gray && downscale(gray, wholeImage(gray), width, height), [gray, width, height]);
 const auto = useMemo(() => values && otsu(values), [values]);
-const grid = useMemo(() => values && cleanup(threshold(values, width, height, cutoff ?? auto!, invert)), [values, cutoff, auto, invert, width, height]);
+const cleaned = useMemo(() => values && cleanup(threshold(values, width, height, cutoff ?? auto!, false)), [values, cutoff, auto, width, height]);
+const grid = useMemo(() => cleaned && (invert ? complement(cleaned) : cleaned), [cleaned, invert]);
 const puzzle = useMemo(() => grid && makePuzzle(grid), [grid]);
 ```
 
@@ -107,9 +108,9 @@ In `vite.config.ts`, the browser project includes `src/**/*.browser.test.{ts,tsx
 | Case | Expected |
 | --- | --- |
 | Upload the PNG | The preview appears with the label "Puzzle preview, 20 by 10" in under 1 second, measured with `performance.now()` |
-| Change the width slider to 40 | The label becomes "Puzzle preview, 40 by 20" |
+| Press End on the width slider | The label becomes "Puzzle preview, 50 by 25" |
 | Cutoff starts on Auto | The cutoff slider's value equals what `otsu` returns for the same downscaled values (computed in the test from the same blob). After moving the slider to 10 and pressing Auto, it's back to that value |
-| Invert | Read the canvas pixels: the center of a cell inside the rectangle is black before Invert and white after, and the reverse for a cell outside it. Cleanup can't interfere because this image has no specks |
+| Invert | Read the canvas pixels: the center of a cell inside the rectangle is black before Invert and white after, and the reverse for a cell outside it. |
 | Fill warning | With the cutoff at 255 every cell is filled, so the "Nearly all cells are filled" message appears |
 | Unsupported file | Uploading a text blob named `photo.heic` shows the "Try a JPEG or PNG" message, and no preview appears |
 
@@ -132,5 +133,4 @@ The solver and verdict (M6); crop, square lock, presets, the shrinking width max
 
 ## Risks
 
-- **Invert with cleanup on:** cleanup treats border cells differently (a border speck is removed, but a border hole is never filled), so on images with specks along the edge the inverted grid can differ from the exact complement by a few edge cells. This follows the spec's step order (threshold with invert, then cleanup). If it bothers anyone, run cleanup before invert instead; that is a one-line change.
 - **Large images on slow machines:** each width step re-runs a downscale of up to 4 million pixels, which takes a few milliseconds on a laptop but could stutter on a low-end machine. If it does, cache `values` per width in a small map, or move the downscale into the M6 worker.
