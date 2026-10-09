@@ -56,12 +56,12 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] A black square centred on white converts to a filled block of the expected size at several grid widths.
-- [ ] A large checkerboard downscaled to a much smaller grid produces mid-gray cell values rather than aliasing patterns, which proves area averaging.
-- [ ] Otsu picks a cutoff between the two peaks of a two-tone test image.
-- [ ] Invert produces the exact complement of the grid.
-- [ ] Cleanup removes isolated filled cells and fills single-cell holes, and leaves 2-cell runs alone.
-- [ ] A transparent PNG converts as if placed on white, and a rotated phone photo (EXIF orientation) converts upright.
+- [x] A black square centred on white converts to a filled block of the expected size at several grid widths.
+- [x] A large checkerboard downscaled to a much smaller grid produces mid-gray cell values rather than aliasing patterns, which proves area averaging.
+- [x] Otsu picks a cutoff between the two peaks of a two-tone test image.
+- [x] Invert produces the exact complement of the grid.
+- [x] Cleanup removes isolated filled cells and fills single-cell holes, and leaves 2-cell runs alone.
+- [x] A transparent PNG converts as if placed on white, and a rotated phone photo (EXIF orientation) converts upright.
 
 ## Phase 2 — Creator
 
