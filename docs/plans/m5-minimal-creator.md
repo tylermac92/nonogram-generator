@@ -111,7 +111,7 @@ In `vite.config.ts`, the browser project includes `src/**/*.browser.test.{ts,tsx
 | Press End on the width slider | The label becomes "Puzzle preview, 50 by 25" |
 | Cutoff starts on Auto | The cutoff slider's value equals what `otsu` returns for the same downscaled values (computed in the test from the same blob). After moving the slider to 10 and pressing Auto, it's back to that value |
 | Invert | Read the canvas pixels: the center of a cell inside the rectangle is black before Invert and white after, and the reverse for a cell outside it. |
-| Fill warning | With the cutoff at 255 every cell is filled, so the "Nearly all cells are filled" message appears |
+| Fill warning | With the cutoff at 0 no cell is filled, so the "Nearly all cells are empty" message appears |
 | Unsupported file | Uploading a text blob named `photo.heic` shows the "Try a JPEG or PNG" message, and no preview appears |
 
 To pass the 1-second check by a wide margin, a separate manual check uses a 12 MP phone photo on the deployed site. This is noted in the PR rather than automated, because a large binary fixture isn't worth adding to the repo.
