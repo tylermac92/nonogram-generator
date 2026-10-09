@@ -1,3 +1,5 @@
+import { Creator } from './Creator.tsx';
+
 export default function App() {
-  return <h1>Nonogram Generator</h1>;
+  return <Creator />;
 }
