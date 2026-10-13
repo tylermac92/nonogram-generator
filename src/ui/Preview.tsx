@@ -11,15 +11,21 @@ import type { Edits } from '../core/puzzle/grid.ts';
 import type { CellValue, Puzzle } from '../core/puzzle/types.ts';
 import { cellAt, lineCells, previewLayout } from './layout.ts';
 
+/** Cells to tint, drawn over the cell values. */
+export interface Highlight {
+  cells: number[];
+  color: string;
+}
+
 /** The grid with its clues, drawn on one canvas; editable when `onPaint` is set. */
 export function Preview({
   puzzle,
-  undetermined,
+  highlight,
   edits,
   onPaint,
 }: {
   puzzle: Puzzle;
-  undetermined?: number[];
+  highlight?: Highlight;
   edits?: Edits;
   /** `start` is true for the first cell of a stroke: one undo step per stroke. */
   onPaint?: (cells: number[], value: CellValue, start: boolean) => void;
@@ -51,11 +57,11 @@ export function Preview({
         canvas.current!,
         puzzle,
         layout,
-        undetermined,
+        highlight,
         edits,
         focused && editable ? at : null,
       ),
-    [puzzle, layout, undetermined, edits, focused, at, editable],
+    [puzzle, layout, highlight, edits, focused, at, editable],
   );
 
   function startPaint(e: PointerEvent) {
@@ -126,7 +132,7 @@ function draw(
   canvas: HTMLCanvasElement,
   puzzle: Puzzle,
   { cell, clueCols, clueRows, width, height }: ReturnType<typeof previewLayout>,
-  undetermined: number[] = [],
+  highlight: Highlight | undefined,
   edits: Edits = new Map(),
   cursor: number | null,
 ) {
@@ -156,8 +162,8 @@ function draw(
     }
   });
 
-  ctx.fillStyle = 'rgba(255, 160, 0, 0.6)';
-  for (const i of undetermined) {
+  ctx.fillStyle = highlight?.color ?? '';
+  for (const i of highlight?.cells ?? []) {
     ctx.fillRect(
       left + (i % w) * cell,
       top + Math.floor(i / w) * cell,

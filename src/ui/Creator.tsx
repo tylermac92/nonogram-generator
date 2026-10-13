@@ -16,8 +16,8 @@ import { squareCrop } from './crop.ts';
 import { CropBox } from './CropBox.tsx';
 import { historyOf, record, redo, undo } from './history.ts';
 import { gridSize } from './layout.ts';
-import { Preview } from './Preview.tsx';
-import { useSolver } from './useSolver.ts';
+import { Preview, type Highlight } from './Preview.tsx';
+import { useSolver, type Check } from './useSolver.ts';
 
 /** Everything the creator's controls set; saved with the project in M12. */
 export interface Settings {
@@ -117,8 +117,8 @@ export function Creator() {
   // Hand edits go on last, so they survive every slider and Invert.
   const edited = useMemo(() => grid && applyEdits(grid, edits), [grid, edits]);
   const puzzle = useMemo(() => edited && makePuzzle(edited), [edited]);
-  const result = useSolver(puzzle);
-  const unknown = result?.undetermined.length ?? 0;
+  const check = useSolver(puzzle);
+  const status = useMemo(() => verdict(check), [check]);
 
   const filled = edited
     ? edited.cells.reduce((sum, v) => sum + v, 0) / edited.cells.length
@@ -297,15 +297,8 @@ export function Creator() {
       </div>
       {puzzle ? (
         <>
-          <p
-            role="status"
-            className={`verdict ${result ? (result.status === 'solved' ? 'valid' : 'invalid') : ''}`}
-          >
-            {!result
-              ? 'Checking…'
-              : result.status === 'solved'
-                ? 'Valid — unique, solvable by logic'
-                : `Not line-solvable — ${unknown} ${unknown === 1 ? 'cell' : 'cells'} undetermined`}
+          <p role="status" className={`verdict ${status.kind}`}>
+            {status.text}
           </p>{' '}
           <button
             type="button"
@@ -327,7 +320,7 @@ export function Creator() {
           </p>
           <Preview
             puzzle={puzzle}
-            undetermined={result?.undetermined}
+            highlight={status.highlight}
             edits={edits}
             onPaint={paint}
           />
@@ -337,4 +330,50 @@ export function Creator() {
       )}
     </main>
   );
+}
+
+const AMBER = 'rgba(255, 160, 0, 0.6)';
+const RED = 'rgba(230, 0, 0, 0.5)';
+const cells = (n: number) => `${n} ${n === 1 ? 'cell' : 'cells'}`;
+
+/** The badge text and colour, and which cells to tint, for a check. */
+function verdict(check: Check | null): {
+  text: string;
+  kind: string;
+  highlight?: Highlight;
+} {
+  if (!check) return { text: 'Checking…', kind: '' };
+  const { result, deep } = check;
+  if (result.status === 'solved') {
+    return { text: 'Valid — unique, solvable by logic', kind: 'valid' };
+  }
+  const n = result.undetermined.length;
+  const undetermined = { cells: result.undetermined, color: AMBER };
+  if (!deep) {
+    return {
+      text: `Not line-solvable — ${cells(n)} undetermined. Checking further…`,
+      kind: 'pending',
+      highlight: undetermined,
+    };
+  }
+  if (deep.status === 'unique') {
+    return {
+      text: `Needs guessing — unique, but ${cells(n)} ${n === 1 ? 'needs' : 'need'} trial and error`,
+      kind: 'guess',
+      highlight: undetermined,
+    };
+  }
+  if (deep.status === 'ambiguous') {
+    const d = deep.differing.length;
+    return {
+      text: `Ambiguous — ${cells(d)} ${d === 1 ? 'differs' : 'differ'} in a second solution`,
+      kind: 'invalid',
+      highlight: { cells: deep.differing, color: RED },
+    };
+  }
+  return {
+    text: "Inconclusive — couldn't prove either way",
+    kind: 'unknown',
+    highlight: undetermined,
+  };
 }

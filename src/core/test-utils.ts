@@ -1,4 +1,4 @@
-import { createGrid } from './puzzle/grid.ts';
+import { createGrid, gridFromRows } from './puzzle/grid.ts';
 import type { Grid } from './puzzle/types.ts';
 
 /** Seeded LCG returning numbers in [0, 1), so tests are deterministic. */
@@ -25,3 +25,17 @@ export function randomGrid(
     ),
   );
 }
+
+/** Unique, but the line solver leaves 75 cells unknown; unchanged by cleanup. Seeded search: randomGrid(10, 10, 31). */
+export const needsGuessing = gridFromRows([
+  '1110100111',
+  '0001100001',
+  '0011000001',
+  '0011111001',
+  '0001011101',
+  '1010011001',
+  '1111000010',
+  '0010011010',
+  '1010000100',
+  '1100000100',
+]);

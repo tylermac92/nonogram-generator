@@ -132,12 +132,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] The deep check runs automatically only when the line solver is stuck, and never blocks the UI.
-- [ ] A known ambiguous puzzle shows Ambiguous, with the cells that differ between the two solutions highlighted.
-- [ ] A known unique puzzle that is not line-solvable shows Needs guessing.
-- [ ] A search that hits the time limit shows Inconclusive rather than a wrong answer.
-- [ ] Changing a setting mid-search cancels the running search.
-- [ ] Any verdict other than Valid shows a warning on export, but export stays possible.
+- [x] The deep check runs automatically only when the line solver is stuck, and never blocks the UI.
+- [x] A known ambiguous puzzle shows Ambiguous, with the cells that differ between the two solutions highlighted.
+- [x] A known unique puzzle that is not line-solvable shows Needs guessing.
+- [x] A search that hits the time limit shows Inconclusive rather than a wrong answer.
+- [x] Changing a setting mid-search cancels the running search.
 
 ### M10. Suggest nearby settings
 
@@ -184,6 +183,7 @@ One user story per milestone from the project spec, each with a description and 
 - [ ] Saving and then loading a project restores the creator exactly: crop, settings, edits, title, and verdict.
 - [ ] The "include source image" toggle defaults to on; with it off, loading still restores the grid and shows that the source is unavailable for re-cropping.
 - [ ] Loading a file with an unknown version or invalid structure shows a clear error and changes nothing.
+- [ ] Any verdict other than Valid shows a warning on export, but export stays possible.
 
 ### M13. Print view
 
