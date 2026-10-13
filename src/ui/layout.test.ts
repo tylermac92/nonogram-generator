@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makePuzzle } from '../core/puzzle/clues.ts';
 import { createGrid } from '../core/puzzle/grid.ts';
 import { random } from '../core/test-utils.ts';
-import { gridSize, previewLayout } from './layout.ts';
+import { cellAt, gridSize, lineCells, previewLayout } from './layout.ts';
 
 describe('gridSize', () => {
   const crop = (width: number, height: number) => ({
@@ -79,5 +79,28 @@ describe('previewLayout', () => {
   it('leaves room for "0" and caps cell size on small grids', () => {
     const layout = previewLayout(makePuzzle(createGrid(5, 5)), 1200);
     expect([layout.clueCols, layout.clueRows, layout.cell]).toEqual([1, 1, 32]);
+  });
+
+  it('finds the grid cell under a point', () => {
+    const layout = previewLayout(checkerboard, 1200); // 16 px cells, 25 clue cells
+    const at = (x: number, y: number) => cellAt(layout, checkerboard, x, y);
+    expect(at(400, 400)).toBe(0);
+    expect(at(1199, 1199)).toBe(2499);
+    expect(at(416, 432)).toBe(2 * 50 + 1);
+    expect(at(399, 500)).toBeNull(); // row clues
+    expect(at(500, 399)).toBeNull(); // column clues
+    expect(at(1200, 500)).toBeNull();
+    expect(at(500, 1200)).toBeNull();
+  });
+});
+
+describe('lineCells', () => {
+  it('lists every cell between two cells', () => {
+    expect(lineCells(0, 4, 10)).toEqual([0, 1, 2, 3, 4]);
+    expect(lineCells(4, 0, 10)).toEqual([4, 3, 2, 1, 0]);
+    expect(lineCells(3, 33, 10)).toEqual([3, 13, 23, 33]);
+    expect(lineCells(0, 33, 10)).toEqual([0, 11, 22, 33]);
+    expect(lineCells(0, 12, 10)).toEqual([0, 11, 12]);
+    expect(lineCells(7, 7, 10)).toEqual([7]);
   });
 });

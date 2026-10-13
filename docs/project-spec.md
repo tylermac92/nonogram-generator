@@ -172,7 +172,7 @@ Seventeen small milestones in build order; each ends in something you can run or
   - Done when: dragging sliders on a 50x50 grid stays smooth and the badge updates.
 - [x] **M7. Crop and sizing.** Crop box, square lock, presets, height derivation and clamping, brightness/contrast.
   - Done when: the 5–50 limits hold for very wide and very tall crops.
-- [ ] **M8. Manual editing.** Click and drag editing, override map, undo/redo in the creator.
+- [x] **M8. Manual editing.** Click and drag editing, override map, undo/redo in the creator.
   - Done when: edits survive cutoff changes and the verdict re-checks instantly.
 
 ### Phase 3 — Solvability and repair

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createGrid, gridColumn, gridFromRows, gridRow } from './grid.ts';
+import {
+  applyEdits,
+  createGrid,
+  gridColumn,
+  gridFromRows,
+  gridRow,
+} from './grid.ts';
 
 describe('grid', () => {
   it('stores cells row-major in a Uint8Array', () => {
@@ -30,5 +36,19 @@ describe('grid', () => {
     expect(() => gridFromRows([])).toThrow(RangeError);
     expect(() => gridFromRows(['10', '1'])).toThrow(RangeError);
     expect(() => gridFromRows(['1x'])).toThrow(RangeError);
+  });
+
+  it('applies edits over a copy of the grid', () => {
+    const grid = gridFromRows(['000', '111']);
+    expect(applyEdits(grid, new Map())).toBe(grid);
+    const edited = applyEdits(
+      grid,
+      new Map([
+        [0, 1],
+        [5, 0],
+      ]),
+    );
+    expect(Array.from(edited.cells)).toEqual([1, 0, 0, 1, 1, 0]);
+    expect(Array.from(grid.cells)).toEqual([0, 0, 0, 1, 1, 1]);
   });
 });

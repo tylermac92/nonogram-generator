@@ -116,11 +116,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] Clicking a cell toggles it, and dragging paints every cell crossed with the value of the first cell's new state.
-- [ ] Edits survive changes to cutoff, brightness, contrast, and invert.
-- [ ] Changing the grid size or crop asks for confirmation before clearing edits.
-- [ ] Undo and redo work for edits (Ctrl/Cmd+Z and Shift+Ctrl/Cmd+Z), with at least 100 steps.
-- [ ] The verdict and tinted cells update after each edit, and edited cells are visually marked.
+- [x] Clicking a cell toggles it, and dragging paints every cell crossed with the value of the first cell's new state.
+- [x] Edits survive changes to cutoff, brightness, contrast, and invert.
+- [x] Changing the grid size or crop asks for confirmation before clearing edits.
+- [x] Undo and redo work for edits (Ctrl/Cmd+Z and Shift+Ctrl/Cmd+Z), with at least 100 steps.
+- [x] The verdict and tinted cells update after each edit, and edited cells are visually marked.
 
 ## Phase 3 — Solvability and repair
 
