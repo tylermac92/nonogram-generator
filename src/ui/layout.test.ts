@@ -1,17 +1,57 @@
 import { describe, expect, it } from 'vitest';
 import { makePuzzle } from '../core/puzzle/clues.ts';
 import { createGrid } from '../core/puzzle/grid.ts';
-import { gridHeight, previewLayout } from './layout.ts';
+import { random } from '../core/test-utils.ts';
+import { gridSize, previewLayout } from './layout.ts';
 
-describe('gridHeight', () => {
-  it('keeps the image proportions', () => {
-    expect(gridHeight(200, 100, 20)).toBe(10);
-    expect(gridHeight(400, 400, 20)).toBe(20);
+describe('gridSize', () => {
+  const crop = (width: number, height: number) => ({
+    x: 0,
+    y: 0,
+    width,
+    height,
   });
 
-  it('clamps to 5–50', () => {
-    expect(gridHeight(100, 300, 20)).toBe(50);
-    expect(gridHeight(1000, 100, 5)).toBe(5);
+  it('keeps the crop proportions', () => {
+    expect(gridSize(crop(400, 400), 20)).toEqual({
+      width: 20,
+      height: 20,
+      maxWidth: 50,
+    });
+    expect(gridSize(crop(200, 100), 20).height).toBe(10);
+  });
+
+  it('lowers the width maximum for tall crops', () => {
+    expect(gridSize(crop(100, 300), 30)).toEqual({
+      width: 16,
+      height: 48,
+      maxWidth: 16,
+    });
+  });
+
+  it('clamps crops too extreme for any width', () => {
+    expect(gridSize(crop(10, 1000), 20)).toEqual({
+      width: 5,
+      height: 50,
+      maxWidth: 5,
+    });
+    expect(gridSize(crop(1000, 10), 50).height).toBe(5);
+  });
+
+  it('always stays within 5–50', () => {
+    const next = random(3);
+    for (let i = 0; i < 1000; i++) {
+      const c = crop(
+        1 + Math.floor(next() * 2048),
+        1 + Math.floor(next() * 2048),
+      );
+      const size = gridSize(c, 5 + Math.floor(next() * 46));
+      expect(size.height).toBeGreaterThanOrEqual(5);
+      expect(size.height).toBeLessThanOrEqual(50);
+      expect(size.width).toBeGreaterThanOrEqual(5);
+      expect(size.width).toBeLessThanOrEqual(size.maxWidth);
+      expect(size.maxWidth).toBeLessThanOrEqual(50);
+    }
   });
 });
 

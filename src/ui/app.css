@@ -15,9 +15,9 @@ body {
 
 .controls {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px 24px;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
 }
 
 .controls input[type='range'] {
@@ -55,4 +55,79 @@ body {
 .verdict.invalid {
   background: #fde0e0;
   color: #8a1010;
+}
+
+.workspace {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  align-items: flex-start;
+  margin: 16px 0;
+}
+
+.crop {
+  margin: 0;
+}
+
+.crop-frame {
+  position: relative;
+  width: fit-content;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.crop-frame canvas {
+  display: block;
+}
+
+.crop-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid #fff;
+  outline: 1px solid #000;
+  /* Dims everything outside the crop. */
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.5);
+  cursor: move;
+  touch-action: none;
+}
+
+.crop-box:focus-visible {
+  outline: 3px solid #1a73e8;
+}
+
+.crop-handle {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #fff;
+  border: 1px solid #000;
+  touch-action: none;
+}
+
+.crop-handle.nw {
+  left: 0;
+  top: 0;
+  cursor: nwse-resize;
+}
+
+.crop-handle.ne {
+  right: 0;
+  top: 0;
+  cursor: nesw-resize;
+}
+
+.crop-handle.sw {
+  left: 0;
+  bottom: 0;
+  cursor: nesw-resize;
+}
+
+.crop-handle.se {
+  right: 0;
+  bottom: 0;
+  cursor: nwse-resize;
+}
+
+.presets button {
+  margin-right: 4px;
 }

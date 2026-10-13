@@ -1,3 +1,4 @@
+import type { Rect } from '../core/image/types.ts';
 import type { Puzzle } from '../core/puzzle/types.ts';
 
 const MIN_SIZE = 5;
@@ -5,14 +6,20 @@ const MAX_SIZE = 50;
 const MIN_CELL = 14;
 const MAX_CELL = 32;
 
-/** Grid height that keeps the image's proportions, clamped to 5–50. */
-export function gridHeight(
-  imageWidth: number,
-  imageHeight: number,
-  width: number,
-): number {
-  const height = Math.round((width * imageHeight) / imageWidth);
-  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, height));
+/**
+ * Grid size for a crop: height = round(width × crop height ÷ crop width),
+ * clamped to 5–50. For tall crops the width's maximum shrinks so the height
+ * fits; only crops beyond about 10:1 still need the clamp.
+ */
+export function gridSize(crop: Rect, width: number) {
+  const ratio = crop.height / crop.width;
+  let maxWidth = MAX_SIZE;
+  while (maxWidth > MIN_SIZE && Math.round(maxWidth * ratio) > MAX_SIZE) {
+    maxWidth--;
+  }
+  const w = Math.min(width, maxWidth);
+  const height = Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(w * ratio)));
+  return { width: w, height, maxWidth };
 }
 
 /**
