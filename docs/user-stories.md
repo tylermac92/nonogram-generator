@@ -88,11 +88,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] The verdict badge updates within about 300 ms after the user stops moving a slider.
-- [ ] Dragging sliders on a 50x50 grid never freezes the page; the solver runs off the main thread.
-- [ ] A result from an older job never overwrites a newer one.
-- [ ] Undetermined cells are tinted on the preview, with a count such as "37 cells undetermined".
-- [ ] A known line-solvable test image shows Valid, and a known ambiguous one shows the tinted region.
+- [x] The verdict badge updates within about 300 ms after the user stops moving a slider.
+- [x] Dragging sliders on a 50x50 grid never freezes the page; the solver runs off the main thread.
+- [x] A result from an older job never overwrites a newer one.
+- [x] Undetermined cells are tinted on the preview, with a count such as "37 cells undetermined".
+- [x] A known line-solvable test image shows Valid, and a known ambiguous one shows the tinted region.
 
 ### M7. Crop and sizing
 
