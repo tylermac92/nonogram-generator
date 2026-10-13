@@ -41,3 +41,32 @@ export function previewLayout(puzzle: Puzzle, availableWidth: number) {
     height: (clueRows + puzzle.height) * cell,
   };
 }
+
+/** The grid cell under canvas point (x, y) in CSS pixels, or null outside the grid. */
+export function cellAt(
+  layout: ReturnType<typeof previewLayout>,
+  puzzle: Puzzle,
+  x: number,
+  y: number,
+): number | null {
+  const { cell, clueCols, clueRows } = layout;
+  const gx = Math.floor(x / cell) - clueCols;
+  const gy = Math.floor(y / cell) - clueRows;
+  if (gx < 0 || gy < 0 || gx >= puzzle.width || gy >= puzzle.height) {
+    return null;
+  }
+  return gy * puzzle.width + gx;
+}
+
+/** Cells on the straight line between two cell indexes, both ends included. */
+export function lineCells(from: number, to: number, width: number): number[] {
+  const [x0, y0] = [from % width, Math.floor(from / width)];
+  const [x1, y1] = [to % width, Math.floor(to / width)];
+  const steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const t = steps && i / steps;
+    return (
+      Math.round(y0 + (y1 - y0) * t) * width + Math.round(x0 + (x1 - x0) * t)
+    );
+  });
+}

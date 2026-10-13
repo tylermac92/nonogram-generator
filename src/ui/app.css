@@ -131,3 +131,15 @@ body {
 .presets button {
   margin-right: 4px;
 }
+
+.preview canvas {
+  touch-action: none;
+}
+
+.preview canvas:focus {
+  outline: none; /* the cell cursor shows focus */
+}
+
+.hint {
+  color: #555;
+}

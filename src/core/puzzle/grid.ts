@@ -1,4 +1,7 @@
-import type { Grid } from './types.ts';
+import type { CellValue, Grid } from './types.ts';
+
+/** Hand edits: cell index → the value the creator chose. */
+export type Edits = ReadonlyMap<number, CellValue>;
 
 export function createGrid(
   width: number,
@@ -43,4 +46,12 @@ export function gridColumn(grid: Grid, x: number): Uint8Array {
     { length: grid.height },
     (_, y) => grid.cells[y * grid.width + x]!,
   );
+}
+
+/** The grid with each edit written over it; the same grid when there are none. */
+export function applyEdits(grid: Grid, edits: Edits): Grid {
+  if (edits.size === 0) return grid;
+  const cells = grid.cells.slice();
+  for (const [i, value] of edits) cells[i] = value;
+  return createGrid(grid.width, grid.height, cells);
 }

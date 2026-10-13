@@ -16,11 +16,14 @@ export function CropBox({
   image,
   crop,
   square,
+  onStart,
   onChange,
 }: {
   image: RgbaImage;
   crop: Rect;
   square: boolean;
+  /** Asked before a drag or key press; false cancels it. */
+  onStart: () => boolean;
   onChange: (crop: Rect) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -53,6 +56,7 @@ export function CropBox({
   function startDrag(e: PointerEvent, corner: Corner | null) {
     e.preventDefault();
     e.stopPropagation();
+    if (!onStart()) return;
     const start = crop;
     const scale = W / canvas.current!.getBoundingClientRect().width;
     const [x0, y0] = [e.clientX, e.clientY];
@@ -88,6 +92,7 @@ export function CropBox({
     )[e.key];
     if (!delta) return;
     e.preventDefault();
+    if (!onStart()) return;
     const [dx, dy] = delta;
     onChange(
       e.shiftKey

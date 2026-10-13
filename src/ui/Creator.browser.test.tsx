@@ -1,5 +1,5 @@
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { decodeImage } from '../core/image/decode.ts';
 import { downscale, otsu, toGray } from '../core/image/pipeline.ts';
@@ -87,6 +87,36 @@ function drag(corner: string | null, dx: number, dy: number) {
     );
 }
 
+/** Screen point at the center of grid cell (x, y) of a width × height grid (32 px cells). */
+function cellPoint(x: number, y: number, width: number, height: number) {
+  const rect = document
+    .querySelector('canvas[role="img"]')!
+    .getBoundingClientRect();
+  return {
+    clientX: rect.right - 1 - (width - x - 0.5) * 32,
+    clientY: rect.bottom - 1 - (height - y - 0.5) * 32,
+  };
+}
+
+/** Presses on the first cell, moves through the rest, and releases ([x, y] on the 20×10 grid). */
+function stroke(...cells: [number, number][]) {
+  const init = { bubbles: true, pointerId: 1, isPrimary: true };
+  const [first, ...rest] = cells.map(([x, y]) => cellPoint(x, y, 20, 10));
+  document
+    .querySelector('canvas[role="img"]')!
+    .dispatchEvent(new PointerEvent('pointerdown', { ...init, ...first }));
+  for (const point of rest) {
+    window.dispatchEvent(
+      new PointerEvent('pointermove', { ...init, ...point }),
+    );
+  }
+  window.dispatchEvent(new PointerEvent('pointerup', init));
+}
+
+/** Red channel near a cell's top-left corner, clear of the edit marker in its center. */
+const fill = (x: number, y: number) => cellColor(x - 0.3, y, 20, 10);
+const BLUE = [26, 115, 232, 255];
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -99,6 +129,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   root.unmount();
   container.remove();
 });
@@ -289,5 +320,147 @@ describe('Creator', () => {
     expect(image.width).toBe(480);
     expect(box.width).toBeCloseTo(box.height, 0);
     expect(box.width).toBeCloseTo(300, 0);
+  });
+
+  describe('editing', () => {
+    /** The square image, once the preview is drawn at its final cell size. */
+    async function ready() {
+      await upload(await squareImage());
+      await expect.poll(() => [fill(10, 5), fill(2, 5)]).toEqual([0, 255]);
+    }
+
+    it('toggles a clicked cell, marks it and re-checks', async () => {
+      await ready();
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      stroke([2, 0]);
+      await expect.poll(() => fill(2, 0)).toBe(0);
+      expect(cellPixel(2, 0, 20, 10)).toEqual(BLUE);
+      await expect.element(verdict(/^Checking…/)).toBeVisible();
+      await expect.element(verdict(/^(Valid|Not line-solvable)/)).toBeVisible();
+    });
+
+    it('paints every crossed cell with the first cell’s new value', async () => {
+      await ready();
+      stroke([0, 0], [4, 0], [6, 0]); // the first move skips three cells
+      await expect
+        .poll(() => [0, 1, 2, 3, 4, 5, 6, 7].map((x) => fill(x, 0)))
+        .toEqual([0, 0, 0, 0, 0, 0, 0, 255]);
+
+      // Starting on a filled cell clears, even over cells that were already empty.
+      stroke([5, 5], [0, 5]);
+      await expect
+        .poll(() => [0, 2, 4, 5, 6].map((x) => fill(x, 5)))
+        .toEqual([255, 255, 255, 255, 0]);
+    });
+
+    it('keeps edits through cutoff, brightness, contrast and Invert', async () => {
+      await ready();
+      stroke([2, 0]); // filled by hand
+      stroke([10, 5]); // cleared by hand
+      const edited = () => [fill(2, 0), fill(10, 5)];
+      await expect.poll(edited).toEqual([0, 255]);
+
+      await press(cutoffSlider(), '{Home}'); // nothing else filled
+      await expect
+        .poll(() => [...edited(), fill(11, 5)])
+        .toEqual([0, 255, 255]);
+      await page.getByRole('button', { name: 'Auto' }).click();
+      await press(page.getByRole('slider', { name: /Brightness/ }), '{Home}');
+      await expect.poll(() => [...edited(), fill(3, 0)]).toEqual([0, 255, 0]);
+      await press(page.getByRole('slider', { name: /Contrast/ }), '{Home}');
+      await expect.poll(edited).toEqual([0, 255]);
+      await press(page.getByRole('slider', { name: /Brightness/ }), '{End}');
+      await press(page.getByRole('slider', { name: /Contrast/ }), '{Home}');
+      await page.getByRole('checkbox', { name: 'Invert' }).click();
+      await expect.poll(edited).toEqual([0, 255]);
+    });
+
+    it('undoes and redoes whole strokes', async () => {
+      await ready();
+      stroke([2, 0]);
+      stroke([0, 1], [3, 1]);
+      const cells = () => [fill(2, 0), fill(0, 1), fill(3, 1)];
+      await expect.poll(cells).toEqual([0, 0, 0]);
+
+      await userEvent.keyboard('{Control>}z{/Control}');
+      await expect.poll(cells).toEqual([0, 255, 255]);
+      await userEvent.keyboard('{Control>}z{/Control}');
+      await expect.poll(cells).toEqual([255, 255, 255]);
+      await expect
+        .element(page.getByRole('button', { name: 'Undo' }))
+        .toBeDisabled();
+      await userEvent.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+      await expect.poll(cells).toEqual([0, 255, 255]);
+      await page.getByRole('button', { name: 'Redo' }).click();
+      await expect.poll(cells).toEqual([0, 0, 0]);
+    });
+
+    it('asks before a width change clears the edits', async () => {
+      await ready();
+      stroke([2, 0]);
+      await expect.poll(() => fill(2, 0)).toBe(0);
+      const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      await press(widthSlider(), '{End}');
+      expect(ask).toHaveBeenCalledWith(
+        'This clears your 1 edited cell. Continue?',
+      );
+      await expect.element(preview(20, 10)).toBeVisible();
+      expect(cellPixel(2, 0, 20, 10)).toEqual(BLUE);
+
+      ask.mockReturnValue(true);
+      await press(widthSlider(), '{End}');
+      await expect.element(preview(50, 25)).toBeVisible();
+      await expect
+        .element(page.getByRole('button', { name: 'Undo' }))
+        .toBeDisabled();
+    });
+
+    it('asks before a crop drag and starts on the next drag', async () => {
+      await upload(await squareImage());
+      await page.getByRole('checkbox', { name: 'Lock to square' }).click();
+      await expect.element(preview(20, 20)).toBeVisible();
+      await expect.poll(() => cellColor(2, 10, 20, 20)).toBe(0);
+      const rect = cellPoint(2, 2, 20, 20);
+      const init = { bubbles: true, pointerId: 1, isPrimary: true, ...rect };
+      document
+        .querySelector('canvas[role="img"]')!
+        .dispatchEvent(new PointerEvent('pointerdown', init));
+      window.dispatchEvent(new PointerEvent('pointerup', init));
+      await expect
+        .element(page.getByRole('button', { name: 'Undo' }))
+        .toBeEnabled();
+      const ask = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+      drag(null, -50, 0)();
+      expect(ask).toHaveBeenCalledOnce();
+      await expect
+        .element(page.getByRole('button', { name: 'Undo' }))
+        .toBeDisabled();
+      expect(page.getByText(/at \(50, 0\)/).query()).not.toBeNull();
+
+      drag(null, -50, 0)();
+      await expect.element(page.getByText(/at \(0, 0\)/)).toBeVisible();
+      expect(ask).toHaveBeenCalledOnce();
+    });
+
+    it('edits from the keyboard', async () => {
+      await ready();
+      const grid = page.getByRole('img', { name: /Puzzle preview/ });
+      await press(grid, ' ');
+      await expect.poll(() => fill(0, 0)).toBe(0);
+      await userEvent.keyboard('{ArrowRight}{ArrowDown}{Enter}');
+      await expect.poll(() => fill(1, 1)).toBe(0);
+    });
+
+    it('re-checks an ambiguous puzzle after an edit', async () => {
+      await upload(await diagonalImage());
+      await expect.element(verdict(/200 cells undetermined/)).toBeVisible();
+      await expect.poll(() => fill(15, 2)).not.toBe(0);
+      // Clearing column 0 gives it the clue 0, which the line solver can use.
+      stroke([0, 0], [0, 9]);
+      await expect
+        .poll(() => document.querySelector('.verdict')!.textContent)
+        .toMatch(/^(Valid|Not line-solvable — (?!200 )\d+ cells)/);
+    });
   });
 });
