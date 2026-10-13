@@ -179,7 +179,7 @@ Seventeen small milestones in build order; each ends in something you can run or
 
 - [x] **M9. Deep check.** Search for a second solution with a timeout; all four verdicts, with differing cells shown for Ambiguous.
   - Done when: known ambiguous, guess-requiring, and valid test puzzles each get the right verdict.
-- [ ] **M10. Suggest settings.** Background scan of cutoff and width with one-click apply.
+- [x] **M10. Suggest settings.** Background scan of cutoff and width with one-click apply.
   - Done when: a failing sample image gets at least one passing suggestion.
 - [ ] **M11. Auto-fix.** Greedy flip loop with budget, progress, cancel, and revertible flipped-cell markers.
   - Done when: most failing sample images pass after a handful of flips.

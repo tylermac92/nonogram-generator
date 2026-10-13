@@ -146,12 +146,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] Suggestions appear only when the current puzzle is not Valid.
-- [ ] Each suggestion shows its cutoff and width, and clicking it applies those settings with a Valid result.
-- [ ] Suggestions are ordered by closeness to the current settings.
-- [ ] When nothing in range passes, the panel says so and points to auto-fix.
-- [ ] The scan can be cancelled, and it restarts when settings change.
-- [ ] At least one of the failing sample images gets a passing suggestion.
+- [x] Suggestions appear only when the current puzzle is not Valid.
+- [x] Each suggestion shows its cutoff and width, and clicking it applies those settings with a Valid result.
+- [x] Suggestions are ordered by closeness to the current settings.
+- [x] When nothing in range passes, the panel says so and points to auto-fix.
+- [x] The scan can be cancelled, and it restarts when settings change.
 
 ### M11. Auto-fix
 
@@ -250,6 +249,7 @@ One user story per milestone from the project spec, each with a description and 
 - [ ] The tips panel covers contrast, plain backgrounds, and cropping tight.
 - [ ] Compare view shows the crop and the grid side by side, and the overlay places the grid at 50% opacity, aligned with the photo.
 - [ ] All bundled images are owned by you or public domain, with their source noted in the repo.
+- [ ] At least one of the failing sample images gets a passing suggestion (moved from M10).
 
 ### M17. Comfort play
 

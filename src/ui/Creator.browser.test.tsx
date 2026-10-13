@@ -9,14 +9,16 @@ import { solve } from '../core/solver/solve.ts';
 import { needsGuessing, randomGrid } from '../core/test-utils.ts';
 import App from './App.tsx';
 
-/** White PNG (200×100 by default) with black rectangles ([x, y, width, height]). */
+/** White PNG (200×100 by default) with rectangles ([x, y, width, height, gray = 0]). */
 async function png(rects: number[][], width = 200, height = 100) {
   const canvas = new OffscreenCanvas(width, height);
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, width, height);
-  ctx.fillStyle = '#000';
-  for (const [x, y, w, h] of rects) ctx.fillRect(x!, y!, w!, h!);
+  for (const [x, y, w, h, v = 0] of rects) {
+    ctx.fillStyle = `rgb(${v}, ${v}, ${v})`;
+    ctx.fillRect(x!, y!, w!, h!);
+  }
   const blob = await canvas.convertToBlob({ type: 'image/png' });
   return new File([blob], 'test.png', { type: 'image/png' });
 }
@@ -130,6 +132,27 @@ function stroke(...cells: [number, number][]) {
 const fill = (x: number, y: number) => cellColor(x - 0.3, y, 20, 10);
 const BLUE = [26, 115, 232, 255];
 
+/** The ambiguous diagonal plus a gray (100) patch at cells (14, 2)–(15, 3): a cutoff above 100 fills it, which breaks the tie. */
+const patchedImage = () =>
+  png([
+    [0, 0, 100, 50],
+    [100, 50, 100, 50],
+    [140, 20, 20, 20, 100],
+  ]);
+
+/** Sets a range input the way a drag would, so React sees one change. */
+function setSlider(locator: { element(): Element }, value: number) {
+  const input = locator.element() as HTMLInputElement;
+  const set = Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    'value',
+  )!.set!;
+  set.call(input, String(value));
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+const scanning = () => page.getByText(/Looking for nearby settings/);
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -221,11 +244,13 @@ describe('Creator', () => {
     await expect
       .element(verdict(/^Ambiguous — 200 cells differ in a second solution/))
       .toBeVisible();
-    // Red over white, not plain white or black.
-    const [r, g, b] = cellPixel(15, 2, 20, 10);
-    expect(r).toBeGreaterThan(200);
-    expect(g).toBeLessThan(170);
-    expect(b).toBe(g);
+    // Red over white, not plain white or black. Polled: the canvas redraws in an effect after the text updates.
+    await expect
+      .poll(() => {
+        const [r, g, b] = cellPixel(15, 2, 20, 10);
+        return r! > 200 && g! < 170 && b === g;
+      })
+      .toBe(true);
   });
 
   it('shows Needs guessing for a unique puzzle the line solver can’t finish', async () => {
@@ -238,9 +263,12 @@ describe('Creator', () => {
       .toBeVisible();
     // Amber over an undetermined cell.
     const cell = solve(makePuzzle(needsGuessing)).undetermined[0]!;
-    const [r, g, b] = cellPixel(cell % 10, Math.floor(cell / 10), 10, 10);
-    expect(r).toBeGreaterThan(g!);
-    expect(g).toBeGreaterThan(b!);
+    await expect
+      .poll(() => {
+        const [r, g, b] = cellPixel(cell % 10, Math.floor(cell / 10), 10, 10);
+        return r! > g! && g! > b!;
+      })
+      .toBe(true);
   });
 
   it('cancels a running deep check when a setting changes', async () => {
@@ -505,6 +533,66 @@ describe('Creator', () => {
         .toMatch(
           /^(Valid|Needs guessing|Inconclusive|Ambiguous — (?!200 )\d+)/,
         );
+    });
+  });
+
+  describe('suggestions', () => {
+    /** The patched image at cutoff 90, which leaves the patch empty: ambiguous. */
+    async function failing() {
+      await upload(await patchedImage());
+      await expect.element(verdict(/^Valid/)).toBeVisible(); // Auto (178) fills the patch
+      setSlider(cutoffSlider(), 90);
+      await expect.element(verdict(/^Ambiguous/)).toBeVisible();
+    }
+
+    it('shows no panel for a Valid puzzle', async () => {
+      await upload(await squareImage());
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await new Promise((done) => setTimeout(done, 700));
+      expect(scanning().query()).toBeNull();
+    });
+
+    it('offers nearby settings that pass, applied in one click', async () => {
+      await failing();
+      await expect.element(scanning()).toBeVisible();
+      const first = page.getByRole('button', { name: 'Cutoff 102, width 20' });
+      await first.click();
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await expect.element(cutoffSlider()).toHaveValue('102');
+      expect(scanning().query()).toBeNull();
+    });
+
+    it('asks before a suggestion clears edits', async () => {
+      await failing();
+      // Starts on a filled cell, so it clears: including the patch cells, which
+      // takes away every passing cutoff at width 20.
+      stroke([9, 4], [14, 3], [14, 2], [15, 2], [15, 3]);
+      const other = page
+        .getByRole('button', { name: /clears your edits/ })
+        .first();
+      await expect.element(other).toBeVisible();
+      const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      await other.click();
+      expect(ask).toHaveBeenCalledOnce();
+      await expect.element(preview(20, 10)).toBeVisible();
+      await expect.element(cutoffSlider()).toHaveValue('90');
+    });
+
+    it('says so when nothing nearby passes', async () => {
+      await upload(await diagonalImage());
+      await expect
+        .element(page.getByText(/No nearby settings pass\. Try auto-fix/))
+        .toBeVisible();
+    });
+
+    it('can be cancelled and restarts when settings change', async () => {
+      await failing();
+      await page.getByRole('button', { name: 'Cancel' }).click();
+      await expect.element(page.getByText('Search cancelled.')).toBeVisible();
+      setSlider(cutoffSlider(), 88);
+      await expect
+        .element(page.getByRole('button', { name: 'Cutoff 102, width 20' }))
+        .toBeVisible();
     });
   });
 });

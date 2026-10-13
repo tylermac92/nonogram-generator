@@ -1,5 +1,7 @@
 import type { Puzzle } from '../core/puzzle/types.ts';
+import type { ScanRequest } from '../core/repair/suggest.ts';
 import type {
+  Job,
   SolveRequest,
   SolveResponse,
   SolveUpdate,
@@ -11,9 +13,9 @@ const start = () =>
   });
 
 /**
- * Checks puzzles in a worker. Only the latest check's updates are delivered.
- * A check that arrives while the last one is still running (a deep search
- * can take seconds) replaces the worker, which cancels that search.
+ * Runs checks and scans in a worker. Only the latest job's updates are
+ * delivered. A job that arrives while the last one is still running (a deep
+ * search or a scan can take seconds) replaces the worker, cancelling it.
  */
 export function createSolverClient() {
   let worker = start();
@@ -24,32 +26,42 @@ export function createSolverClient() {
   const listen = () => {
     worker.onmessage = ({ data }: MessageEvent<SolveResponse>) => {
       if (data.id !== latest) return;
+      // A stuck line result is followed by the deep check's.
       busy = 'result' in data && data.result.status === 'stuck';
       onUpdate(data);
     };
   };
   listen();
+  /** Stops the running job, if any, by replacing the worker. */
+  function cancel() {
+    if (!busy || disposed) return;
+    worker.terminate();
+    worker = start();
+    listen();
+    busy = false;
+  }
+  function post(job: Job, callback: (update: SolveUpdate) => void) {
+    if (disposed) return;
+    cancel();
+    busy = true;
+    onUpdate = callback;
+    const request: SolveRequest = { ...job, id: ++latest };
+    worker.postMessage(request);
+  }
   return {
+    /** Line-solves, then deep-checks if stuck. Only the clues and the solution are sent. */
     check(
       { width, height, rows, cols, solution }: Puzzle,
       callback: (update: SolveUpdate) => void,
     ) {
-      if (disposed) return;
-      if (busy) {
-        worker.terminate();
-        worker = start();
-        listen();
-      }
-      busy = true;
-      onUpdate = callback;
-      // The line solver gets only the clues; the solution is for the deep check.
-      const request: SolveRequest = {
-        id: ++latest,
-        puzzle: { width, height, rows, cols },
-        solution: solution.cells,
-      };
-      worker.postMessage(request);
+      post(
+        { puzzle: { width, height, rows, cols }, solution: solution.cells },
+        callback,
+      );
     },
+    scan: (request: ScanRequest, callback: (update: SolveUpdate) => void) =>
+      post({ scan: request }, callback),
+    cancel,
     dispose() {
       disposed = true;
       worker.terminate();
