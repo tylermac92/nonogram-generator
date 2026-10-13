@@ -1,32 +1,58 @@
-import type { SolveResult } from '../core/solver/solve.ts';
-import type { SolveRequest, SolveResponse } from './solver.worker.ts';
+import type { Puzzle } from '../core/puzzle/types.ts';
+import type {
+  SolveRequest,
+  SolveResponse,
+  SolveUpdate,
+} from './solver.worker.ts';
 
-/**
- * Runs line solves in a worker. Only the latest check's result is delivered;
- * older jobs still finish in the worker, but their results are dropped.
- */
-export function createSolverClient() {
-  const worker = new Worker(new URL('./solver.worker.ts', import.meta.url), {
+const start = () =>
+  new Worker(new URL('./solver.worker.ts', import.meta.url), {
     type: 'module',
   });
+
+/**
+ * Checks puzzles in a worker. Only the latest check's updates are delivered.
+ * A check that arrives while the last one is still running (a deep search
+ * can take seconds) replaces the worker, which cancels that search.
+ */
+export function createSolverClient() {
+  let worker = start();
   let latest = 0;
-  let onResult: (result: SolveResult) => void = () => {};
-  worker.onmessage = (e: MessageEvent<SolveResponse>) => {
-    if (e.data.id === latest) onResult(e.data.result);
+  let busy = false;
+  let disposed = false;
+  let onUpdate: (update: SolveUpdate) => void = () => {};
+  const listen = () => {
+    worker.onmessage = ({ data }: MessageEvent<SolveResponse>) => {
+      if (data.id !== latest) return;
+      busy = 'result' in data && data.result.status === 'stuck';
+      onUpdate(data);
+    };
   };
+  listen();
   return {
     check(
-      { width, height, rows, cols }: SolveRequest['puzzle'],
-      callback: (result: SolveResult) => void,
+      { width, height, rows, cols, solution }: Puzzle,
+      callback: (update: SolveUpdate) => void,
     ) {
-      onResult = callback;
-      // Only the clues are sent: the solver must never see the solution.
+      if (disposed) return;
+      if (busy) {
+        worker.terminate();
+        worker = start();
+        listen();
+      }
+      busy = true;
+      onUpdate = callback;
+      // The line solver gets only the clues; the solution is for the deep check.
       const request: SolveRequest = {
         id: ++latest,
         puzzle: { width, height, rows, cols },
+        solution: solution.cells,
       };
       worker.postMessage(request);
     },
-    dispose: () => worker.terminate(),
+    dispose() {
+      disposed = true;
+      worker.terminate();
+    },
   };
 }

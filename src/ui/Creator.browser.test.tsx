@@ -3,6 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { page, userEvent } from 'vitest/browser';
 import { decodeImage } from '../core/image/decode.ts';
 import { downscale, otsu, toGray } from '../core/image/pipeline.ts';
+import { makePuzzle } from '../core/puzzle/clues.ts';
+import type { Grid } from '../core/puzzle/types.ts';
+import { solve } from '../core/solver/solve.ts';
+import { needsGuessing, randomGrid } from '../core/test-utils.ts';
 import App from './App.tsx';
 
 /** White PNG (200×100 by default) with black rectangles ([x, y, width, height]). */
@@ -26,6 +30,15 @@ const diagonalImage = () =>
     [0, 0, 100, 50],
     [100, 50, 100, 50],
   ]);
+
+/** A grid drawn as black 10 px blocks on white, so it downscales back to itself. */
+async function gridImage({ width, height, cells }: Grid) {
+  const rects: number[][] = [];
+  cells.forEach((v, i) => {
+    if (v) rects.push([(i % width) * 10, Math.floor(i / width) * 10, 10, 10]);
+  });
+  return png(rects, width * 10, height * 10);
+}
 
 /** RGBA at the center of grid cell (x, y), counted from the bottom-right corner so clue areas don't matter. */
 function cellPixel(x: number, y: number, width: number, height: number) {
@@ -200,19 +213,48 @@ describe('Creator', () => {
     await expect.element(preview(20, 10)).toBeVisible();
     await expect.element(verdict(/^Valid/)).toBeVisible();
     expect(cellPixel(2, 5, 20, 10)).toEqual([255, 255, 255, 255]);
+    expect(verdict(/Checking further/).query()).toBeNull();
   });
 
-  it('tints undetermined cells and counts them', async () => {
+  it('shows Ambiguous and tints the cells that differ', async () => {
     await upload(await diagonalImage());
     await expect
-      .element(verdict(/Not line-solvable — 200 cells undetermined/))
+      .element(verdict(/^Ambiguous — 200 cells differ in a second solution/))
       .toBeVisible();
-    // Amber over white, not plain white or black.
+    // Red over white, not plain white or black.
     const [r, g, b] = cellPixel(15, 2, 20, 10);
-    expect(r).toBe(255);
-    expect(g).toBeGreaterThan(150);
-    expect(g).toBeLessThan(240);
-    expect(b).toBeLessThan(150);
+    expect(r).toBeGreaterThan(200);
+    expect(g).toBeLessThan(170);
+    expect(b).toBe(g);
+  });
+
+  it('shows Needs guessing for a unique puzzle the line solver can’t finish', async () => {
+    await upload(await gridImage(needsGuessing));
+    await page.getByRole('button', { name: '10', exact: true }).click();
+    await expect
+      .element(
+        verdict(/^Needs guessing — unique, but 75 cells need trial and error/),
+      )
+      .toBeVisible();
+    // Amber over an undetermined cell.
+    const cell = solve(makePuzzle(needsGuessing)).undetermined[0]!;
+    const [r, g, b] = cellPixel(cell % 10, Math.floor(cell / 10), 10, 10);
+    expect(r).toBeGreaterThan(g!);
+    expect(g).toBeGreaterThan(b!);
+  });
+
+  it('cancels a running deep check when a setting changes', async () => {
+    await upload(await gridImage(randomGrid(30, 30, 1, 0.5)));
+    await page.getByRole('button', { name: '30', exact: true }).click();
+    await expect.element(verdict(/Checking further…/)).toBeVisible();
+    const start = performance.now();
+    await press(widthSlider(), '{Home}');
+    await expect.element(preview(5, 5)).toBeVisible();
+    // The old search would hold the worker for up to 3 seconds.
+    await expect
+      .element(verdict(/^(Valid|Not|Needs|Ambiguous|Inconclusive)/))
+      .toBeVisible();
+    expect(performance.now() - start).toBeLessThan(1000);
   });
 
   it('re-checks after a slider change within the time budget', async () => {
@@ -454,13 +496,15 @@ describe('Creator', () => {
 
     it('re-checks an ambiguous puzzle after an edit', async () => {
       await upload(await diagonalImage());
-      await expect.element(verdict(/200 cells undetermined/)).toBeVisible();
+      await expect.element(verdict(/^Ambiguous — 200 cells/)).toBeVisible();
       await expect.poll(() => fill(15, 2)).not.toBe(0);
       // Clearing column 0 gives it the clue 0, which the line solver can use.
       stroke([0, 0], [0, 9]);
       await expect
         .poll(() => document.querySelector('.verdict')!.textContent)
-        .toMatch(/^(Valid|Not line-solvable — (?!200 )\d+ cells)/);
+        .toMatch(
+          /^(Valid|Needs guessing|Inconclusive|Ambiguous — (?!200 )\d+)/,
+        );
     });
   });
 });

@@ -57,6 +57,17 @@ body {
   color: #8a1010;
 }
 
+.verdict.guess {
+  background: #fdefc8;
+  color: #6b4800;
+}
+
+.verdict.pending,
+.verdict.unknown {
+  background: #e4e4e4;
+  color: #333;
+}
+
 .workspace {
   display: flex;
   flex-wrap: wrap;
