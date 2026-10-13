@@ -102,11 +102,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] Dragging or resizing the crop box updates the grid preview live.
-- [ ] Height = round(width × crop height ÷ crop width), always between 5 and 50.
-- [ ] For a very tall crop, the width slider's maximum drops so that height never exceeds 50; for a very wide crop, height never drops below 5.
-- [ ] Lock to square keeps the crop at 1:1, and each preset (10, 15, 20, 25, 30, 40, 50) sets the width and turns the lock on.
-- [ ] Brightness and contrast sliders change the preview and are included in the settings that later get saved.
+- [x] Dragging or resizing the crop box updates the grid preview live.
+- [x] Height = round(width × crop height ÷ crop width), always between 5 and 50.
+- [x] For a very tall crop, the width slider's maximum drops so that height never exceeds 50; for a very wide crop, height never drops below 5.
+- [x] Lock to square keeps the crop at 1:1, and each preset (10, 15, 20, 25, 30, 40, 50) sets the width and turns the lock on.
+- [x] Brightness and contrast sliders change the preview and are included in the settings that later get saved.
 
 ### M8. Manual editing
 

@@ -5,12 +5,12 @@ import { decodeImage } from '../core/image/decode.ts';
 import { downscale, otsu, toGray } from '../core/image/pipeline.ts';
 import App from './App.tsx';
 
-/** 200×100 white PNG with black rectangles ([x, y, width, height]). */
-async function png(rects: number[][]) {
-  const canvas = new OffscreenCanvas(200, 100);
+/** White PNG (200×100 by default) with black rectangles ([x, y, width, height]). */
+async function png(rects: number[][], width = 200, height = 100) {
+  const canvas = new OffscreenCanvas(width, height);
   const ctx = canvas.getContext('2d')!;
   ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, 200, 100);
+  ctx.fillRect(0, 0, width, height);
   ctx.fillStyle = '#000';
   for (const [x, y, w, h] of rects) ctx.fillRect(x!, y!, w!, h!);
   const blob = await canvas.convertToBlob({ type: 'image/png' });
@@ -29,7 +29,8 @@ const diagonalImage = () =>
 
 /** RGBA at the center of grid cell (x, y), counted from the bottom-right corner so clue areas don't matter. */
 function cellPixel(x: number, y: number, width: number, height: number) {
-  const canvas = document.querySelector('canvas')!;
+  const canvas =
+    document.querySelector<HTMLCanvasElement>('canvas[role="img"]')!;
   const dpr = window.devicePixelRatio;
   const cell = 32 * dpr; // the container is wide enough for the 32 px maximum
   const right = canvas.width - dpr;
@@ -46,6 +47,45 @@ const verdict = (text: RegExp) => page.getByText(text);
 const preview = (width: number, height: number) =>
   page.getByRole('img', { name: `Puzzle preview, ${width} by ${height}` });
 const cutoffSlider = () => page.getByRole('slider', { name: /Cutoff/ });
+
+const widthSlider = () => page.getByRole('slider', { name: /Width/ });
+
+/** Presses a key on an element: focus it, then type. */
+async function press(locator: { element(): Element }, keys: string) {
+  (locator.element() as HTMLElement).focus();
+  await userEvent.keyboard(keys);
+}
+
+/**
+ * Drags a crop handle (or the box, for null) by (dx, dy) screen pixels.
+ * Returns a function that releases the pointer, so a test can check mid-drag.
+ */
+function drag(corner: string | null, dx: number, dy: number) {
+  const target = corner
+    ? document.querySelector(`[data-corner="${corner}"]`)!
+    : document.querySelector('.crop-box')!;
+  const box = target.getBoundingClientRect();
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  const init = { bubbles: true, pointerId: 1, isPrimary: true };
+  target.dispatchEvent(
+    new PointerEvent('pointerdown', { ...init, clientX: x, clientY: y }),
+  );
+  window.dispatchEvent(
+    new PointerEvent('pointermove', {
+      ...init,
+      clientX: x + dx,
+      clientY: y + dy,
+    }),
+  );
+  return () =>
+    window.dispatchEvent(
+      new PointerEvent('pointerup', {
+        ...init,
+        clientX: x + dx,
+        clientY: y + dy,
+      }),
+    );
+}
 
 let container: HTMLDivElement;
 let root: Root;
@@ -154,5 +194,100 @@ describe('Creator', () => {
     await expect.element(verdict(/^Valid/)).toBeVisible();
     expect(performance.now() - start).toBeLessThan(600);
     await expect.element(preview(50, 25)).toBeVisible();
+  });
+
+  it('lowers the width maximum for a tall crop', async () => {
+    await upload(await squareImage());
+    await expect.element(preview(20, 10)).toBeVisible();
+    const release = drag('nw', 500, 0); // shrinks to the 10 px minimum width
+    // Checked before release: the preview follows the drag live.
+    await expect.element(preview(5, 50)).toBeVisible();
+    release();
+    await expect.element(widthSlider()).toHaveAttribute('max', '5');
+    await expect.element(page.getByText('Width 5 (height 50)')).toBeVisible();
+  });
+
+  it('keeps the height at least 5 for a wide crop', async () => {
+    await upload(await squareImage());
+    await expect.element(preview(20, 10)).toBeVisible();
+    drag('se', 0, -500)();
+    await expect.element(page.getByText(/Crop 200 × 10 px/)).toBeVisible();
+    await expect.element(preview(20, 5)).toBeVisible();
+  });
+
+  it('moves the crop when the box is dragged', async () => {
+    await upload(await squareImage());
+    await page.getByRole('checkbox', { name: 'Lock to square' }).click();
+    await expect.element(preview(20, 20)).toBeVisible();
+    // Crop 50–150 covers the black rectangle edge to edge, so row 10 is all black.
+    await expect.poll(() => cellColor(2, 10, 20, 20)).toBe(0);
+    const release = drag(null, -50, 0);
+    await expect.element(page.getByText(/at \(0, 0\)/)).toBeVisible();
+    // Now the left half of the crop is white margin.
+    await expect.poll(() => cellColor(2, 10, 20, 20)).toBe(255);
+    release();
+  });
+
+  it('moves and resizes the crop with the keyboard', async () => {
+    await upload(await squareImage());
+    await page.getByRole('checkbox', { name: 'Lock to square' }).click();
+    const box = page.getByRole('group', { name: /Crop area/ });
+    await press(box, '{ArrowRight}');
+    await expect
+      .element(page.getByText(/Crop 100 × 100 px at \(52, 0\)/))
+      .toBeVisible();
+    await press(box, '{Shift>}{ArrowLeft}{/Shift}');
+    await expect
+      .element(page.getByText(/Crop 98 × 98 px at \(52, 0\)/))
+      .toBeVisible();
+  });
+
+  it('keeps the crop square while locked', async () => {
+    await upload(await squareImage());
+    await page.getByRole('checkbox', { name: 'Lock to square' }).click();
+    await expect.element(preview(20, 20)).toBeVisible();
+    drag('se', -30, -10)();
+    await expect.element(page.getByText(/Crop 70 × 70 px/)).toBeVisible();
+    await expect.element(preview(20, 20)).toBeVisible();
+  });
+
+  it('applies a preset size and locks to square', async () => {
+    await upload(await squareImage());
+    await page.getByRole('button', { name: '30', exact: true }).click();
+    await expect.element(preview(30, 30)).toBeVisible();
+    await expect
+      .element(page.getByRole('checkbox', { name: 'Lock to square' }))
+      .toBeChecked();
+  });
+
+  it('changes the grid with brightness', async () => {
+    await upload(await squareImage());
+    await expect.element(preview(20, 10)).toBeVisible();
+    // −100 maps white to 127, below the Auto cutoff of 128: every cell fills.
+    await press(page.getByRole('slider', { name: /Brightness/ }), '{Home}');
+    await expect
+      .element(page.getByText(/Nearly all cells are filled/))
+      .toBeVisible();
+  });
+
+  it('changes the grid with contrast', async () => {
+    await upload(await squareImage());
+    await expect.element(preview(20, 10)).toBeVisible();
+    // −100 flattens every cell to 128, so the grid is uniform.
+    await press(page.getByRole('slider', { name: /Contrast/ }), '{Home}');
+    await expect.element(page.getByText(/Nearly all cells are/)).toBeVisible();
+  });
+
+  it('draws the crop box to scale over a scaled-down image', async () => {
+    await upload(await png([], 1600, 1000));
+    await page.getByRole('checkbox', { name: 'Lock to square' }).click();
+    await expect.element(page.getByText(/Crop 1000 × 1000 px/)).toBeVisible();
+    const box = document.querySelector('.crop-box')!.getBoundingClientRect();
+    const image = document
+      .querySelector('.crop canvas')!
+      .getBoundingClientRect();
+    expect(image.width).toBe(480);
+    expect(box.width).toBeCloseTo(box.height, 0);
+    expect(box.width).toBeCloseTo(300, 0);
   });
 });
