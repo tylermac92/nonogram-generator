@@ -6,7 +6,9 @@ import { downscale, otsu, toGray } from '../core/image/pipeline.ts';
 import { makePuzzle } from '../core/puzzle/clues.ts';
 import type { Grid } from '../core/puzzle/types.ts';
 import { solve } from '../core/solver/solve.ts';
-import { needsGuessing, randomGrid } from '../core/test-utils.ts';
+import { autoFix } from '../core/repair/autofix.ts';
+import { gridFromRows } from '../core/puzzle/grid.ts';
+import { needsGuessing, randomGrid, wavesImage } from '../core/test-utils.ts';
 import App from './App.tsx';
 
 /** White PNG (200×100 by default) with rectangles ([x, y, width, height, gray = 0]). */
@@ -592,6 +594,98 @@ describe('Creator', () => {
       setSlider(cutoffSlider(), 88);
       await expect
         .element(page.getByRole('button', { name: 'Cutoff 102, width 20' }))
+        .toBeVisible();
+    });
+  });
+
+  describe('auto-fix', () => {
+    const PURPLE = [147, 52, 230, 255];
+    const autoFixButton = () => page.getByRole('button', { name: 'Auto-fix' });
+    /** The cell auto-fix flips on the diagonal image, computed the same way in Node. */
+    const diagonalGrid = gridFromRows(
+      Array.from({ length: 10 }, (_, y) =>
+        y < 5
+          ? '1'.repeat(10) + '0'.repeat(10)
+          : '0'.repeat(10) + '1'.repeat(10),
+      ),
+    );
+    const [flip] = autoFix({
+      grid: diagonalGrid,
+      values: Float32Array.from(diagonalGrid.cells, (v) => (v ? 0 : 255)),
+      cutoff: 128,
+      locked: [],
+    }).flips;
+    const flipPixel = () =>
+      cellPixel(flip! % 20, Math.floor(flip! / 20), 20, 10);
+
+    async function fixDiagonal() {
+      await upload(await diagonalImage());
+      await autoFixButton().click();
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await expect
+        .element(page.getByText('Auto-fix flipped 1 cell.'))
+        .toBeVisible();
+      await expect.poll(flipPixel).toEqual(PURPLE);
+    }
+
+    it('fixes an ambiguous puzzle and marks the flipped cell', async () => {
+      await fixDiagonal();
+    });
+
+    it('reverts one flipped cell with a click', async () => {
+      await fixDiagonal();
+      stroke([flip! % 20, Math.floor(flip! / 20)]);
+      await expect.element(verdict(/^Ambiguous/)).toBeVisible();
+      await expect.poll(() => flipPixel()).not.toEqual(PURPLE);
+      // Reverted, not hand-edited: no marker of either colour.
+      expect(cellPixel(flip! % 20, Math.floor(flip! / 20), 20, 10)).not.toEqual(
+        BLUE,
+      );
+    });
+
+    it('undoes and redoes the whole fix in one step', async () => {
+      await fixDiagonal();
+      await userEvent.keyboard('{Control>}z{/Control}');
+      await expect.element(verdict(/^Ambiguous/)).toBeVisible();
+      await expect
+        .element(page.getByRole('button', { name: 'Undo' }))
+        .toBeDisabled();
+      await userEvent.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await expect.poll(flipPixel).toEqual(PURPLE);
+    });
+
+    it('can be cancelled, leaving the grid unchanged', async () => {
+      await upload(await gridImage(randomGrid(30, 30, 1, 0.5))); // about 14 s of fixing
+      await page.getByRole('button', { name: '30', exact: true }).click();
+      await autoFixButton().click();
+      await expect.element(page.getByText(/^Auto-fixing…/)).toBeVisible();
+      await page.getByRole('button', { name: 'Cancel auto-fix' }).click();
+      await expect.element(autoFixButton()).toBeVisible();
+      expect(page.getByText(/Auto-fix flipped/).query()).toBeNull();
+      await expect
+        .element(page.getByRole('button', { name: 'Undo' }))
+        .toBeDisabled();
+    });
+
+    it('reports when no single flip helps', async () => {
+      const { width, height, data } = wavesImage();
+      const canvas = new OffscreenCanvas(width, height);
+      const rgba = new Uint8ClampedArray(width * height * 4);
+      data.forEach((v, i) => rgba.set([v, v, v, 255], i * 4));
+      canvas.getContext('2d')!.putImageData(new ImageData(rgba, width), 0, 0);
+      const blob = await canvas.convertToBlob({ type: 'image/png' });
+      await upload(new File([blob], 'waves.png', { type: 'image/png' }));
+      await page.getByRole('button', { name: '30', exact: true }).click();
+      setSlider(cutoffSlider(), 128);
+      await expect.element(verdict(/900 cells/)).toBeVisible();
+      await autoFixButton().click();
+      await expect
+        .element(
+          page.getByText(
+            'Auto-fix flipped 0 cells; 900 cells are still undetermined. No single flip helps any more.',
+          ),
+        )
         .toBeVisible();
     });
   });

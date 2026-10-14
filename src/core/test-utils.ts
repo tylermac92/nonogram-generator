@@ -39,3 +39,18 @@ export const needsGuessing = gridFromRows([
   '1010000100',
   '1100000100',
 ]);
+
+/** Smooth but repetitive 500×500 gray image: at 30x30 and cutoff 128 the line solver determines nothing, and no single flip helps. */
+export function wavesImage() {
+  const size = 500;
+  const data = new Uint8ClampedArray(size * size).map((_, i) => {
+    const x = i % size;
+    const y = Math.floor(i / size);
+    return (
+      128 +
+      90 * Math.sin(x / 37) * Math.cos(y / 23) +
+      30 * Math.sin((x + y) / 11)
+    );
+  });
+  return { width: size, height: size, data };
+}

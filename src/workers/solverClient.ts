@@ -1,4 +1,5 @@
 import type { Puzzle } from '../core/puzzle/types.ts';
+import type { FixRequest } from '../core/repair/autofix.ts';
 import type { ScanRequest } from '../core/repair/suggest.ts';
 import type {
   Job,
@@ -13,9 +14,9 @@ const start = () =>
   });
 
 /**
- * Runs checks and scans in a worker. Only the latest job's updates are
+ * Runs checks, scans and fixes in a worker. Only the latest job's updates are
  * delivered. A job that arrives while the last one is still running (a deep
- * search or a scan can take seconds) replaces the worker, cancelling it.
+ * search, a scan or a fix can take seconds) replaces the worker, cancelling it.
  */
 export function createSolverClient() {
   let worker = start();
@@ -26,8 +27,10 @@ export function createSolverClient() {
   const listen = () => {
     worker.onmessage = ({ data }: MessageEvent<SolveResponse>) => {
       if (data.id !== latest) return;
-      // A stuck line result is followed by the deep check's.
-      busy = 'result' in data && data.result.status === 'stuck';
+      // More is coming after a stuck line result or a fix's progress.
+      busy =
+        ('result' in data && data.result.status === 'stuck') ||
+        'progress' in data;
       onUpdate(data);
     };
   };
@@ -61,6 +64,8 @@ export function createSolverClient() {
     },
     scan: (request: ScanRequest, callback: (update: SolveUpdate) => void) =>
       post({ scan: request }, callback),
+    fix: (request: FixRequest, callback: (update: SolveUpdate) => void) =>
+      post({ fix: request }, callback),
     cancel,
     dispose() {
       disposed = true;

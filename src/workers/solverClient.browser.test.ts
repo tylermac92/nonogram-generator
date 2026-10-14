@@ -3,6 +3,7 @@ import { makePuzzle } from '../core/puzzle/clues.ts';
 import { gridFromRows } from '../core/puzzle/grid.ts';
 import { FILLED } from '../core/solver/line.ts';
 import { needsGuessing, randomGrid } from '../core/test-utils.ts';
+import { autoFix, type FixRequest } from '../core/repair/autofix.ts';
 import { suggestSettings, type ScanRequest } from '../core/repair/suggest.ts';
 import { createSolverClient } from './solverClient.ts';
 
@@ -130,6 +131,46 @@ describe('createSolverClient', () => {
     client.cancel();
     await wait(1500);
     expect(cancelled).not.toHaveBeenCalled();
+    client.dispose();
+  });
+
+  it('auto-fixes with progress, and a new job cancels a running fix', async () => {
+    const grid = randomGrid(15, 15, 7, 0.5); // needs two flips
+    const request: FixRequest = {
+      grid,
+      values: Float32Array.from(grid.cells, (v) => (v ? 0 : 255)),
+      cutoff: 128,
+      locked: [],
+    };
+    const client = createSolverClient();
+    const updates = vi.fn();
+    client.fix(request, updates);
+    await vi.waitFor(() =>
+      expect(updates.mock.calls.some(([u]) => 'fix' in u)).toBe(true),
+    );
+    const expected = autoFix(request);
+    expect(updates.mock.calls.map(([u]) => u)).toMatchObject([
+      { progress: { flips: 1 } },
+      { progress: { flips: 2, undetermined: 0 } },
+      { fix: expected },
+    ]);
+
+    // A slow fix (seconds per round), replaced after its first progress message.
+    const slow = vi.fn();
+    client.fix(
+      { ...request, grid: noise, values: new Float32Array(900) },
+      slow,
+    );
+    await vi.waitFor(() => expect(slow).toHaveBeenCalled(), { timeout: 5000 });
+    const start = performance.now();
+    const quick = vi.fn();
+    client.fix(request, quick);
+    await vi.waitFor(() =>
+      expect(quick.mock.calls.some(([u]) => 'fix' in u)).toBe(true),
+    );
+    // Had the slow fix kept running, the worker would have taken seconds.
+    expect(performance.now() - start).toBeLessThan(1000);
+    expect(slow.mock.calls.every(([u]) => 'progress' in u)).toBe(true);
     client.dispose();
   });
 });
