@@ -22,11 +22,13 @@ export function Preview({
   puzzle,
   highlight,
   edits,
+  fixed,
   onPaint,
 }: {
   puzzle: Puzzle;
   highlight?: Highlight;
   edits?: Edits;
+  fixed?: ReadonlySet<number>; // auto-fixed cells among the edits
   /** `start` is true for the first cell of a stroke: one undo step per stroke. */
   onPaint?: (cells: number[], value: CellValue, start: boolean) => void;
 }) {
@@ -59,9 +61,10 @@ export function Preview({
         layout,
         highlight,
         edits,
+        fixed,
         focused && editable ? at : null,
       ),
-    [puzzle, layout, highlight, edits, focused, at, editable],
+    [puzzle, layout, highlight, edits, fixed, focused, at, editable],
   );
 
   function startPaint(e: PointerEvent) {
@@ -134,6 +137,7 @@ function draw(
   { cell, clueCols, clueRows, width, height }: ReturnType<typeof previewLayout>,
   highlight: Highlight | undefined,
   edits: Edits = new Map(),
+  fixed: ReadonlySet<number> = new Set(),
   cursor: number | null,
 ) {
   const { width: w, height: h, solution } = puzzle;
@@ -172,9 +176,10 @@ function draw(
     );
   }
 
-  // Edited cells: a small blue square that shows on black, white and amber.
-  ctx.fillStyle = '#1a73e8';
+  // Edited cells: a small square that shows on black, white and amber;
+  // blue for hand edits, purple for auto-fixed cells.
   for (const i of edits.keys()) {
+    ctx.fillStyle = fixed.has(i) ? '#9334e6' : '#1a73e8';
     ctx.fillRect(
       left + ((i % w) + 1 / 3) * cell,
       top + (Math.floor(i / w) + 1 / 3) * cell,

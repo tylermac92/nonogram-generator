@@ -1,5 +1,11 @@
 import type { Puzzle } from '../core/puzzle/types.ts';
 import {
+  autoFix,
+  type FixProgress,
+  type FixRequest,
+  type FixResult,
+} from '../core/repair/autofix.ts';
+import {
   suggestSettings,
   type ScanRequest,
   type Suggestion,
@@ -12,14 +18,20 @@ export type Job =
       puzzle: Pick<Puzzle, 'width' | 'height' | 'rows' | 'cols'>;
       solution: Uint8Array; // read only by the deep check, which looks for a different solution
     }
-  | { scan: ScanRequest };
+  | { scan: ScanRequest }
+  | { fix: FixRequest };
 export type SolveRequest = Job & { id: number };
 
-/** The line result first; then, only when it is stuck, the deep check's. */
+/**
+ * A check sends the line result, then the deep check's when stuck. A fix
+ * sends progress after each flip, then its result. A scan sends one message.
+ */
 export type SolveUpdate =
   | { result: SolveResult }
   | { deep: DeepResult }
-  | { suggestions: Suggestion[] };
+  | { suggestions: Suggestion[] }
+  | { progress: FixProgress }
+  | { fix: FixResult };
 export type SolveResponse = SolveUpdate & { id: number };
 
 addEventListener('message', ({ data }: MessageEvent<SolveRequest>) => {
@@ -29,6 +41,15 @@ addEventListener('message', ({ data }: MessageEvent<SolveRequest>) => {
       id,
       suggestions: suggestSettings(data.scan),
     };
+    postMessage(response);
+    return;
+  }
+  if ('fix' in data) {
+    const fix = autoFix(data.fix, (progress) => {
+      const update: SolveResponse = { id, progress };
+      postMessage(update);
+    });
+    const response: SolveResponse = { id, fix };
     postMessage(response);
     return;
   }

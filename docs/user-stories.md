@@ -160,12 +160,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] Clicking Auto-fix shows progress and can be cancelled; cancelling leaves the grid unchanged.
-- [ ] On success, the verdict becomes Valid, and the result reports how many cells were flipped.
-- [ ] Flipped cells are marked in the preview, and each one can be reverted individually.
-- [ ] One undo step reverts the whole auto-fix.
-- [ ] When the budget runs out or no flip helps, the app reports partial progress and keeps the improvements.
-- [ ] Most failing sample images pass after auto-fix with fewer than 2% of cells flipped.
+- [x] Clicking Auto-fix shows progress and can be cancelled; cancelling leaves the grid unchanged.
+- [x] On success, the verdict becomes Valid, and the result reports how many cells were flipped.
+- [x] Flipped cells are marked in the preview, and each one can be reverted individually.
+- [x] One undo step reverts the whole auto-fix.
+- [x] When the budget runs out or no flip helps, the app reports partial progress and keeps the improvements.
 
 ## Phase 4 — Output
 
@@ -250,6 +249,7 @@ One user story per milestone from the project spec, each with a description and 
 - [ ] Compare view shows the crop and the grid side by side, and the overlay places the grid at 50% opacity, aligned with the photo.
 - [ ] All bundled images are owned by you or public domain, with their source noted in the repo.
 - [ ] At least one of the failing sample images gets a passing suggestion (moved from M10).
+- [ ] Most failing sample images pass after auto-fix with fewer than 2% of cells flipped (moved from M11).
 
 ### M17. Comfort play
 

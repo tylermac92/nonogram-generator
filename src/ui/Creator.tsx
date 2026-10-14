@@ -9,6 +9,7 @@ import {
 } from '../core/image/pipeline.ts';
 import type { Rect, RgbaImage } from '../core/image/types.ts';
 import { makePuzzle } from '../core/puzzle/clues.ts';
+import type { FixResult } from '../core/repair/autofix.ts';
 import {
   DULL,
   fillFraction,
@@ -23,6 +24,7 @@ import { historyOf, record, redo, undo } from './history.ts';
 import { gridSize } from './layout.ts';
 import { Preview, type Highlight } from './Preview.tsx';
 import { useSolver, type Check } from './useSolver.ts';
+import { useAutoFix } from './useAutoFix.ts';
 import { useSuggestions } from './useSuggestions.ts';
 
 /** Everything the creator's controls set; saved with the project in M12. */
@@ -46,7 +48,12 @@ const DEFAULTS: Settings = {
   contrast: 0,
 };
 const PRESETS = [10, 15, 20, 25, 30, 40, 50];
-const NO_EDITS = historyOf<Edits>(new Map());
+/** One undo step: the edits, and which of them auto-fix made. */
+interface EditState {
+  edits: Edits;
+  fixed: ReadonlySet<number>;
+}
+const NO_EDITS = historyOf<EditState>({ edits: new Map(), fixed: new Set() });
 
 export function Creator() {
   const [image, setImage] = useState<RgbaImage | null>(null);
@@ -56,7 +63,11 @@ export function Creator() {
   const latest = useRef(0);
   const update = (patch: Partial<Settings>) =>
     setSettings((s) => ({ ...s, ...patch }));
-  const edits = history.present;
+  const { edits, fixed } = history.present;
+  const [report, setReport] = useState<{
+    state: EditState;
+    result: FixResult;
+  } | null>(null);
 
   const confirmClear = () =>
     edits.size === 0 ||
@@ -68,14 +79,6 @@ export function Creator() {
     if (!confirmClear()) return;
     setHistory(NO_EDITS);
     update(patch);
-  }
-
-  function paint(cells: number[], value: CellValue, start: boolean) {
-    setHistory((h) => {
-      const next = new Map(h.present);
-      for (const i of cells) next.set(i, value);
-      return start ? record(h, next) : { ...h, present: next };
-    });
   }
 
   useEffect(() => {
@@ -111,6 +114,20 @@ export function Creator() {
   // Hand edits go on last, so they survive every slider and Invert.
   const edited = useMemo(() => grid && applyEdits(grid, edits), [grid, edits]);
   const puzzle = useMemo(() => edited && makePuzzle(edited), [edited]);
+  function paint(cells: number[], value: CellValue, start: boolean) {
+    setHistory((h) => {
+      const edits = new Map(h.present.edits);
+      const fixed = new Set(h.present.fixed);
+      for (const i of cells) {
+        // Painting an auto-fixed cell back to the image's value reverts that flip.
+        if (fixed.delete(i) && grid?.cells[i] === value) edits.delete(i);
+        else edits.set(i, value);
+      }
+      const next = { edits, fixed };
+      return start ? record(h, next) : { ...h, present: next };
+    });
+  }
+
   const check = useSolver(puzzle);
   const status = useMemo(() => verdict(check), [check]);
 
@@ -145,6 +162,32 @@ export function Creator() {
     edits,
   ]);
   const scan = useSuggestions(scanRequest);
+
+  const fixer = useAutoFix(puzzle);
+  function startFix() {
+    if (!edited || !adjusted) return;
+    const before = history.present;
+    const request = {
+      grid: edited,
+      values: adjusted,
+      cutoff: level,
+      locked: [...before.edits.keys()],
+    };
+    fixer.start(request, (result) => {
+      let state = before;
+      if (result.flips.length > 0) {
+        const edits = new Map(before.edits);
+        const fixed = new Set(before.fixed);
+        for (const i of result.flips) {
+          edits.set(i, 1 - edited.cells[i]!);
+          fixed.add(i);
+        }
+        state = { edits, fixed };
+        setHistory((h) => record(h, state)); // one undo step for the whole fix
+      }
+      setReport({ state, result });
+    });
+  }
 
   function applySuggestion(s: Suggestion) {
     if (s.width === width) update({ cutoff: s.cutoff });
@@ -377,16 +420,37 @@ export function Creator() {
                     ))}
                   </p>
                 ))}
+              <p>
+                {fixer.running ? (
+                  <>
+                    Auto-fixing…
+                    {fixer.running.progress &&
+                      ` ${cells(fixer.running.progress.flips)} flipped, ${fixer.running.progress.undetermined} undetermined.`}{' '}
+                    <button type="button" onClick={fixer.cancel}>
+                      Cancel auto-fix
+                    </button>
+                  </>
+                ) : (
+                  <button type="button" onClick={startFix}>
+                    Auto-fix
+                  </button>
+                )}
+              </p>
             </div>
+          )}
+          {report?.state === history.present && (
+            <p role="status">{fixReport(report.result)}</p>
           )}
           <p className="hint">
             Click or drag on the grid to edit cells, or use the arrow keys and
-            Space. Ctrl+Z undoes.
+            Space. Ctrl+Z undoes. Purple marks a cell auto-fix flipped; click it
+            to flip it back.
           </p>
           <Preview
             puzzle={puzzle}
             highlight={status.highlight}
             edits={edits}
+            fixed={fixed}
             onPaint={paint}
           />
         </>
@@ -400,6 +464,15 @@ export function Creator() {
 const AMBER = 'rgba(255, 160, 0, 0.6)';
 const RED = 'rgba(230, 0, 0, 0.5)';
 const cells = (n: number) => `${n} ${n === 1 ? 'cell' : 'cells'}`;
+
+function fixReport({ flips, undetermined, reason }: FixResult) {
+  const flipped = `Auto-fix flipped ${cells(flips.length)}`;
+  if (reason === 'solved') return `${flipped}.`;
+  const left = `${cells(undetermined)} ${undetermined === 1 ? 'is' : 'are'} still undetermined`;
+  return reason === 'stuck'
+    ? `${flipped}; ${left}. No single flip helps any more.`
+    : `${flipped}; ${left}. The flip budget (5% of cells) ran out.`;
+}
 
 /** The badge text and colour, and which cells to tint, for a check. */
 function verdict(check: Check | null): {

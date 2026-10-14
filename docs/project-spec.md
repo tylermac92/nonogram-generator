@@ -181,7 +181,7 @@ Seventeen small milestones in build order; each ends in something you can run or
   - Done when: known ambiguous, guess-requiring, and valid test puzzles each get the right verdict.
 - [x] **M10. Suggest settings.** Background scan of cutoff and width with one-click apply.
   - Done when: a failing sample image gets at least one passing suggestion.
-- [ ] **M11. Auto-fix.** Greedy flip loop with budget, progress, cancel, and revertible flipped-cell markers.
+- [x] **M11. Auto-fix.** Greedy flip loop with budget, progress, cancel, and revertible flipped-cell markers.
   - Done when: most failing sample images pass after a handful of flips.
 
 ### Phase 4 — Output
