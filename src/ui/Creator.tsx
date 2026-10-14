@@ -2,15 +2,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { decodeImage } from '../core/image/decode.ts';
 import {
   adjust,
-  cleanup,
+  binarize,
   downscale,
   otsu,
-  threshold,
   toGray,
 } from '../core/image/pipeline.ts';
 import type { Rect, RgbaImage } from '../core/image/types.ts';
 import { makePuzzle } from '../core/puzzle/clues.ts';
-import { applyEdits, createGrid, type Edits } from '../core/puzzle/grid.ts';
+import {
+  DULL,
+  fillFraction,
+  type ScanRequest,
+  type Suggestion,
+} from '../core/repair/suggest.ts';
+import { applyEdits, type Edits } from '../core/puzzle/grid.ts';
 import type { CellValue } from '../core/puzzle/types.ts';
 import { squareCrop } from './crop.ts';
 import { CropBox } from './CropBox.tsx';
@@ -18,6 +23,7 @@ import { historyOf, record, redo, undo } from './history.ts';
 import { gridSize } from './layout.ts';
 import { Preview, type Highlight } from './Preview.tsx';
 import { useSolver, type Check } from './useSolver.ts';
+import { useSuggestions } from './useSuggestions.ts';
 
 /** Everything the creator's controls set; saved with the project in M12. */
 export interface Settings {
@@ -98,21 +104,9 @@ export function Creator() {
     () => values && adjust(values, brightness, contrast),
     [values, brightness, contrast],
   );
-  // Cleanup runs before invert so Invert is an exact swap.
-  const cleaned = useMemo(
-    () => adjusted && cleanup(threshold(adjusted, width, height, level, false)),
-    [adjusted, width, height, level],
-  );
   const grid = useMemo(
-    () =>
-      cleaned && invert
-        ? createGrid(
-            cleaned.width,
-            cleaned.height,
-            cleaned.cells.map((v) => 1 - v),
-          )
-        : cleaned,
-    [cleaned, invert],
+    () => adjusted && binarize(adjusted, width, height, level, invert),
+    [adjusted, width, height, level, invert],
   );
   // Hand edits go on last, so they survive every slider and Invert.
   const edited = useMemo(() => grid && applyEdits(grid, edits), [grid, edits]);
@@ -120,13 +114,48 @@ export function Creator() {
   const check = useSolver(puzzle);
   const status = useMemo(() => verdict(check), [check]);
 
-  const filled = edited
-    ? edited.cells.reduce((sum, v) => sum + v, 0) / edited.cells.length
-    : 0.5;
+  const failing = check !== null && check.result.status !== 'solved';
+  const scanRequest = useMemo((): ScanRequest | null => {
+    if (!failing || !gray) return null;
+    const sizes = [];
+    for (let w = width - 3; w <= width + 3; w++) {
+      if (w >= 5 && w <= maxWidth) sizes.push(gridSize(crop, w));
+    }
+    return {
+      gray,
+      crop,
+      sizes,
+      width,
+      cutoff: level,
+      brightness,
+      contrast,
+      invert,
+      edits,
+    };
+  }, [
+    failing,
+    gray,
+    crop,
+    width,
+    maxWidth,
+    level,
+    brightness,
+    contrast,
+    invert,
+    edits,
+  ]);
+  const scan = useSuggestions(scanRequest);
+
+  function applySuggestion(s: Suggestion) {
+    if (s.width === width) update({ cutoff: s.cutoff });
+    else resize({ width: s.width, cutoff: s.cutoff });
+  }
+
+  const filled = edited ? fillFraction(edited) : 0.5;
   const warning =
-    filled > 0.9
+    filled > DULL.above
       ? 'Nearly all cells are filled — the puzzle will be dull.'
-      : filled < 0.05
+      : filled < DULL.below
         ? 'Nearly all cells are empty — the puzzle will be dull.'
         : null;
 
@@ -314,6 +343,42 @@ export function Creator() {
           >
             Redo
           </button>
+          {scan.state && (
+            <div className="suggestions" aria-live="polite">
+              {scan.state.status === 'scanning' && (
+                <p>
+                  Looking for nearby settings that pass…{' '}
+                  <button type="button" onClick={scan.cancel}>
+                    Cancel
+                  </button>
+                </p>
+              )}
+              {scan.state.status === 'cancelled' && <p>Search cancelled.</p>}
+              {scan.state.status === 'done' &&
+                (scan.state.suggestions.length === 0 ? (
+                  <p>
+                    No nearby settings pass. Try auto-fix, or edit the
+                    highlighted cells by hand.
+                  </p>
+                ) : (
+                  <p>
+                    These nearby settings pass:{' '}
+                    {scan.state.suggestions.map((s) => (
+                      <button
+                        key={`${s.width}-${s.cutoff}`}
+                        type="button"
+                        onClick={() => applySuggestion(s)}
+                      >
+                        Cutoff {s.cutoff}, width {s.width}
+                        {s.width !== width &&
+                          edits.size > 0 &&
+                          ' — clears your edits'}
+                      </button>
+                    ))}
+                  </p>
+                ))}
+            </div>
+          )}
           <p className="hint">
             Click or drag on the grid to edit cells, or use the arrow keys and
             Space. Ctrl+Z undoes.

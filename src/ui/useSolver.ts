@@ -31,7 +31,9 @@ export function useSolver(puzzle: Puzzle | null): Check | null {
           setChecked((c) =>
             'result' in update
               ? { puzzle, result: update.result }
-              : c && { ...c, deep: update.deep },
+              : 'deep' in update && c
+                ? { ...c, deep: update.deep }
+                : c,
           ),
         ),
       DEBOUNCE_MS,

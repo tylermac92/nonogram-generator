@@ -154,3 +154,7 @@ body {
 .hint {
   color: #555;
 }
+
+.suggestions button {
+  margin-right: 4px;
+}

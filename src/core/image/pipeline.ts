@@ -165,3 +165,19 @@ export function cleanup(grid: Grid): Grid {
   });
   return createGrid(width, height, out);
 }
+
+/**
+ * Threshold, cleanup, then Invert: the grid the creator shows before edits.
+ * Cleanup runs before Invert so Invert is an exact swap.
+ */
+export function binarize(
+  adjusted: Float32Array,
+  width: number,
+  height: number,
+  cutoff: number,
+  invert: boolean,
+): Grid {
+  const grid = cleanup(threshold(adjusted, width, height, cutoff, false));
+  if (invert) grid.cells.forEach((v, i) => (grid.cells[i] = 1 - v));
+  return grid;
+}

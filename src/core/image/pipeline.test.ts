@@ -3,6 +3,7 @@ import { gridFromRows } from '../puzzle/grid.ts';
 import { random } from '../test-utils.ts';
 import {
   adjust,
+  binarize,
   cleanup,
   downscale,
   otsu,
@@ -236,5 +237,16 @@ describe('cleanup', () => {
   it('never treats a border cell as a hole', () => {
     const input = ['101', '111'];
     expect(clean(input)).toEqual(input);
+  });
+});
+
+describe('binarize', () => {
+  it('thresholds, cleans up, then inverts', () => {
+    // A lone dark cell (removed by cleanup) and a 2x2 dark block (kept).
+    const values = Float32Array.from('909999009900'.split(''), (c) => +c * 25);
+    const plain = binarize(values, 4, 3, 128, false);
+    expect(rows(plain.cells, 4)).toEqual(['0000', '0011', '0011']);
+    const inverted = binarize(values, 4, 3, 128, true);
+    expect(rows(inverted.cells, 4)).toEqual(['1111', '1100', '1100']);
   });
 });

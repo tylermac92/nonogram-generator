@@ -3,6 +3,7 @@ import { makePuzzle } from '../core/puzzle/clues.ts';
 import { gridFromRows } from '../core/puzzle/grid.ts';
 import { FILLED } from '../core/solver/line.ts';
 import { needsGuessing, randomGrid } from '../core/test-utils.ts';
+import { suggestSettings, type ScanRequest } from '../core/repair/suggest.ts';
 import { createSolverClient } from './solverClient.ts';
 
 const hollow = gridFromRows([
@@ -20,6 +21,25 @@ const hollow = gridFromRows([
 const plus = gridFromRows(['00100', '00100', '11111', '00100', '00100']);
 /** Noise the deep check can't settle within its 3 seconds. */
 const noise = randomGrid(30, 30, 1, 0.5);
+/** A 50-wide noisy gradient at 7 widths: every scanned grid is different, so the scan takes a while. */
+const scan: ScanRequest = {
+  gray: {
+    width: 1000,
+    height: 1000,
+    data: new Uint8ClampedArray(1e6).map(
+      (_, i) =>
+        ((i % 1000) / 4 + Math.floor(i / 1000) / 8 + ((i * 7919) % 97)) % 256,
+    ),
+  },
+  crop: { x: 0, y: 0, width: 1000, height: 1000 },
+  sizes: [44, 45, 46, 47, 48, 49, 50].map((w) => ({ width: w, height: w })),
+  width: 47,
+  cutoff: 128,
+  brightness: 0,
+  contrast: 0,
+  invert: false,
+  edits: new Map(),
+};
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
 describe('createSolverClient', () => {
@@ -95,6 +115,21 @@ describe('createSolverClient', () => {
     expect(performance.now() - start).toBeLessThan(500);
     expect(next.mock.calls[0]![0].result.status).toBe('solved');
     expect(old).toHaveBeenCalledOnce();
+    client.dispose();
+  });
+
+  it('scans nearby settings, and a cancelled scan reports nothing', async () => {
+    const client = createSolverClient();
+    const done = vi.fn();
+    client.scan(scan, done);
+    await vi.waitFor(() => expect(done).toHaveBeenCalled(), { timeout: 3000 });
+    expect(done.mock.calls[0]![0].suggestions).toEqual(suggestSettings(scan));
+
+    const cancelled = vi.fn();
+    client.scan(scan, cancelled);
+    client.cancel();
+    await wait(1500);
+    expect(cancelled).not.toHaveBeenCalled();
     client.dispose();
   });
 });
