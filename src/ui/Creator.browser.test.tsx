@@ -967,7 +967,8 @@ describe('Creator', () => {
       expect(sheets()).toHaveLength(0);
       await expect.element(preview(20, 10)).toBeVisible();
       expect(await settledVerdict()).toBe(verdictText);
-      expect(previewImage()).toBe(before);
+      // Hidden, the preview measured zero width; it redraws once shown again.
+      await expect.poll(previewImage).toBe(before);
       await expect
         .element(page.getByRole('button', { name: 'Undo' }))
         .toBeEnabled();
