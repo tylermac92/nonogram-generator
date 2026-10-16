@@ -905,4 +905,73 @@ describe('Creator', () => {
       await expect.element(page.getByLabelText('Title')).toHaveValue('Patch');
     });
   });
+
+  describe('print view', () => {
+    const sheets = () => [...document.querySelectorAll<HTMLElement>('.sheet')];
+    const filledRects = (sheet: HTMLElement) =>
+      sheet.querySelectorAll('rect[width="20"]').length;
+    const openPrint = () =>
+      page.getByRole('button', { name: 'Print…' }).click();
+
+    it('shows the puzzle and solution sheets in place of the creator', async () => {
+      await upload(await squareImage());
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await page.getByLabelText('Title').fill('Box');
+      await openPrint();
+      await expect
+        .element(page.getByRole('heading', { name: 'Box' }))
+        .toBeVisible();
+      const [puzzle, solution] = sheets();
+      expect(sheets()).toHaveLength(2);
+      expect(filledRects(puzzle!)).toBe(0);
+      expect(filledRects(solution!)).toBe(60);
+      expect(solution!.querySelector('h2')!.textContent).toBe('Box — Solution');
+      expect(document.querySelector<HTMLElement>('.creator')!.hidden).toBe(
+        true,
+      );
+      expect(page.getByText(/isn't Valid yet/).query()).toBeNull();
+    });
+
+    it('resizes the sheets when the paper or orientation changes', async () => {
+      await upload(await squareImage());
+      await openPrint();
+      const mm = (px: number) => (px * 25.4) / 96;
+      const width = () => mm(sheets()[0]!.getBoundingClientRect().width);
+      const pageRule = () =>
+        document.querySelector('.print-view style')!.textContent;
+      expect(width()).toBeCloseTo(215.9, 0);
+      expect(pageRule()).toContain('size: Letter portrait');
+      await page.getByRole('combobox', { name: /Paper/ }).selectOptions('a4');
+      expect(width()).toBeCloseTo(210, 0);
+      await page
+        .getByRole('combobox', { name: /Orientation/ })
+        .selectOptions('landscape');
+      expect(width()).toBeCloseTo(297, 0);
+      expect(pageRule()).toContain('size: A4 landscape');
+    });
+
+    it('prints, and goes back to the creator unchanged', async () => {
+      const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+      await upload(await diagonalImage());
+      await expect.element(verdict(/^Ambiguous/)).toBeVisible();
+      stroke([0, 0]);
+      const verdictText = await settledVerdict();
+      const before = previewImage();
+      await openPrint();
+      await expect
+        .element(page.getByText(/You can still print it/))
+        .toBeVisible();
+      await page.getByRole('button', { name: 'Print', exact: true }).click();
+      expect(print).toHaveBeenCalledOnce();
+      await page.getByRole('button', { name: 'Back to editor' }).click();
+      expect(sheets()).toHaveLength(0);
+      await expect.element(preview(20, 10)).toBeVisible();
+      expect(await settledVerdict()).toBe(verdictText);
+      // Hidden, the preview measured zero width; it redraws once shown again.
+      await expect.poll(previewImage).toBe(before);
+      await expect
+        .element(page.getByRole('button', { name: 'Undo' }))
+        .toBeEnabled();
+    });
+  });
 });
