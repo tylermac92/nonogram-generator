@@ -722,7 +722,8 @@ describe('Creator', () => {
       await upload(new File([blob], 'waves.png', { type: 'image/png' }));
       await page.getByRole('button', { name: '30', exact: true }).click();
       setSlider(cutoffSlider(), 128);
-      await expect.element(verdict(/900 cells/)).toBeVisible();
+      // No verdict wait: the deep check may replace the 900-cell text at once.
+      // The report below names 900 cells, so it is for this puzzle.
       await autoFixButton().click();
       await expect
         .element(
@@ -747,7 +748,8 @@ describe('Creator', () => {
       await page.getByLabelText('Solution').click();
       await page.getByRole('button', { name: 'SVG' }).click();
       await page.getByRole('button', { name: 'PNG 2x' }).click();
-      await expect.poll(() => files.length).toBe(3);
+      // The first PNG loads system fonts, which can take seconds on CI.
+      await expect.poll(() => files.length, { timeout: 10_000 }).toBe(3);
       const [blank, solution, png] = await Promise.all(files);
       expect(blank!.name).toBe('My Cat-puzzle.svg');
       expect(solution!.name).toBe('My Cat-solution.svg');
