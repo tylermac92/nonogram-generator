@@ -222,3 +222,19 @@ fieldset button {
     break-after: page;
   }
 }
+
+.play {
+  box-sizing: border-box;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+.play-controls button {
+  margin-right: 4px;
+}
+
+.play-controls button[aria-pressed='true'] {
+  background: #1a73e8;
+  color: #fff;
+}

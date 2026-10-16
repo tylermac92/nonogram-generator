@@ -70,3 +70,24 @@ export function lineCells(from: number, to: number, width: number): number[] {
     );
   });
 }
+
+export type Axis = 'row' | 'column';
+
+/** The axis a drag from `start` to `cell` moved further along; ties go to the row. */
+export function axisOf(start: number, cell: number, width: number): Axis {
+  const dx = Math.abs((cell % width) - (start % width));
+  const dy = Math.abs(Math.floor(cell / width) - Math.floor(start / width));
+  return dx >= dy ? 'row' : 'column';
+}
+
+/** `cell` moved onto the start cell's row or column, so a drifting drag stays on its line. */
+export function alongAxis(
+  start: number,
+  cell: number,
+  width: number,
+  axis: Axis,
+): number {
+  return axis === 'row'
+    ? Math.floor(start / width) * width + (cell % width)
+    : Math.floor(cell / width) * width + (start % width);
+}

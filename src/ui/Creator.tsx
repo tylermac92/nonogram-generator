@@ -31,6 +31,7 @@ import { Export } from './Export.tsx';
 import { historyOf, record, redo, undo } from './history.ts';
 import { gridSize } from './layout.ts';
 import { Preview, type Highlight } from './Preview.tsx';
+import { PlayView } from './PlayView.tsx';
 import { PrintView } from './PrintView.tsx';
 import { useSolver, type Check } from './useSolver.ts';
 import { useAutoFix } from './useAutoFix.ts';
@@ -61,6 +62,8 @@ export function Creator() {
   const [title, setTitle] = useState('');
   const [includeImage, setIncludeImage] = useState(true);
   const [printing, setPrinting] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const away = printing || playing; // another view is showing
   // A loaded project's grid, used as is until a setting changes.
   const [loaded, setLoaded] = useState<{
     grid: Grid;
@@ -88,6 +91,7 @@ export function Creator() {
   }
 
   useEffect(() => {
+    if (away) return; // play has its own undo; hidden edits must not change
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== 'z') return;
       e.preventDefault();
@@ -95,7 +99,7 @@ export function Creator() {
     };
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
-  }, []);
+  }, [away]);
   const { crop, square, cutoff, invert, brightness, contrast } = settings;
 
   // Each stage re-runs only when its own inputs change.
@@ -315,9 +319,16 @@ export function Creator() {
           onClose={() => setPrinting(false)}
         />
       )}
+      {playing && puzzle && (
+        <PlayView
+          puzzle={puzzle}
+          title={title}
+          onClose={() => setPlaying(false)}
+        />
+      )}
       <main
         className="creator"
-        hidden={printing}
+        hidden={away}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
@@ -581,6 +592,15 @@ export function Creator() {
                 }}
               >
                 Print…
+              </button>{' '}
+              <button
+                type="button"
+                onClick={() => {
+                  setPlaying(true);
+                  scrollTo(0, 0);
+                }}
+              >
+                Play this puzzle
               </button>
             </p>
             <fieldset>

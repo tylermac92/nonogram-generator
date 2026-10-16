@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { makePuzzle } from '../core/puzzle/clues.ts';
 import { createGrid } from '../core/puzzle/grid.ts';
 import { random } from '../core/test-utils.ts';
-import { cellAt, gridSize, lineCells, previewLayout } from './layout.ts';
+import {
+  alongAxis,
+  axisOf,
+  cellAt,
+  gridSize,
+  lineCells,
+  previewLayout,
+} from './layout.ts';
 
 describe('gridSize', () => {
   const crop = (width: number, height: number) => ({
@@ -102,5 +109,20 @@ describe('lineCells', () => {
     expect(lineCells(0, 33, 10)).toEqual([0, 11, 22, 33]);
     expect(lineCells(0, 12, 10)).toEqual([0, 11, 12]);
     expect(lineCells(7, 7, 10)).toEqual([7]);
+  });
+});
+
+describe('alongAxis', () => {
+  // 10 wide; start at (2, 3) = 32.
+  it('keeps a diagonal drift on the start row', () => {
+    expect(axisOf(32, 55, 10)).toBe('row'); // (5, 5): further across than down
+    expect(alongAxis(32, 55, 10, 'row')).toBe(35);
+    expect(alongAxis(32, 99, 10, 'row')).toBe(39);
+  });
+
+  it('keeps a diagonal drift on the start column', () => {
+    expect(axisOf(32, 63, 10)).toBe('column'); // (3, 6): further down than across
+    expect(alongAxis(32, 63, 10, 'column')).toBe(62);
+    expect(alongAxis(32, 9, 10, 'column')).toBe(2);
   });
 });
