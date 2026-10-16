@@ -158,3 +158,15 @@ body {
 .suggestions button {
   margin-right: 4px;
 }
+
+fieldset {
+  margin-top: 12px;
+}
+
+fieldset button {
+  margin-right: 4px;
+}
+
+.warning {
+  color: #8a5a00;
+}

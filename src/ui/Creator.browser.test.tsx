@@ -155,6 +155,37 @@ function setSlider(locator: { element(): Element }, value: number) {
 
 const scanning = () => page.getByText(/Looking for nearby settings/);
 
+/** Stubs download-link clicks and collects each file instead. */
+function captureDownloads() {
+  const files: Promise<{ name: string; blob: Blob }>[] = [];
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    const name = this.download;
+    files.push(
+      fetch(this.href)
+        .then((r) => r.blob())
+        .then((blob) => ({ name, blob })),
+    );
+  });
+  return files;
+}
+
+const previewImage = () =>
+  document.querySelector<HTMLCanvasElement>('canvas[role="img"]')!.toDataURL();
+const openProject = (text: string) =>
+  userEvent.upload(
+    page.getByLabelText('Open project'),
+    new File([text], 'project.json', { type: 'application/json' }),
+  );
+/** The verdict once the deep check, if any, has finished. */
+async function settledVerdict() {
+  await expect
+    .poll(() => document.querySelector('.verdict')?.textContent ?? '')
+    .toMatch(/^(Valid|Needs|Ambiguous|Inconclusive)/);
+  return document.querySelector('.verdict')!.textContent;
+}
+
 let container: HTMLDivElement;
 let root: Root;
 
@@ -668,6 +699,19 @@ describe('Creator', () => {
         .toBeDisabled();
     });
 
+    it('keeps the auto-fix markers through a saved project', async () => {
+      const files = captureDownloads();
+      await fixDiagonal();
+      await page.getByRole('button', { name: 'Save project' }).click();
+      const json = await (await files[0]!).blob.text();
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      await upload(await squareImage());
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await openProject(json);
+      await expect.poll(flipPixel).toEqual(PURPLE);
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+    });
+
     it('reports when no single flip helps', async () => {
       const { width, height, data } = wavesImage();
       const canvas = new OffscreenCanvas(width, height);
@@ -687,6 +731,176 @@ describe('Creator', () => {
           ),
         )
         .toBeVisible();
+    });
+  });
+
+  describe('export and projects', () => {
+    const saveButton = () => page.getByRole('button', { name: 'Save project' });
+    const svgSize = (svg: string) => Number(/width="(\d+)"/.exec(svg)![1]);
+
+    it('exports SVG and PNG named after the title, without a warning when Valid', async () => {
+      const files = captureDownloads();
+      await upload(await squareImage());
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await page.getByLabelText('Title').fill('My Cat');
+      await page.getByRole('button', { name: 'SVG' }).click();
+      await page.getByLabelText('Solution').click();
+      await page.getByRole('button', { name: 'SVG' }).click();
+      await page.getByRole('button', { name: 'PNG 2x' }).click();
+      await expect.poll(() => files.length).toBe(3);
+      const [blank, solution, png] = await Promise.all(files);
+      expect(blank!.name).toBe('My Cat-puzzle.svg');
+      expect(solution!.name).toBe('My Cat-solution.svg');
+      expect(png!.name).toBe('My Cat-solution@2x.png');
+      const cellRects = (svg: string) =>
+        svg.match(/<rect [^>]*width="20"/g) ?? [];
+      const svg = await solution!.blob.text();
+      expect(cellRects(await blank!.blob.text())).toHaveLength(0);
+      expect(cellRects(svg)).toHaveLength(60); // the 10×6 black rectangle
+      const bitmap = await createImageBitmap(png!.blob);
+      expect(bitmap.width).toBe(svgSize(svg) * 2);
+      expect(page.getByText(/isn't Valid yet/).query()).toBeNull();
+    });
+
+    it('warns on export when the puzzle is not Valid, and still exports', async () => {
+      const files = captureDownloads();
+      await upload(await diagonalImage());
+      await expect.element(verdict(/^Ambiguous/)).toBeVisible();
+      await expect.element(page.getByText(/isn't Valid yet/)).toBeVisible();
+      await page.getByRole('button', { name: 'SVG' }).click();
+      await expect.poll(() => files.length).toBe(1);
+      expect((await files[0]!).name).toBe('nonogram-puzzle.svg');
+    });
+
+    /**
+     * The patched image at cutoff 90 with the top-left cell of each black
+     * block cleared: still ambiguous, but no longer the 200-cell verdict.
+     */
+    async function editPatched() {
+      await upload(await patchedImage());
+      await expect.element(verdict(/^Valid/)).toBeVisible(); // Auto fills the patch
+      setSlider(cutoffSlider(), 90);
+      await expect.element(verdict(/^Ambiguous — 200 /)).toBeVisible();
+      stroke([0, 0]);
+      stroke([10, 5]);
+      await expect.element(verdict(/^Ambiguous — (?!200 )/)).toBeVisible();
+    }
+
+    /** Edits cells, sets the cutoff and title, and saves; returns what to compare and the file. */
+    async function editAndSave() {
+      const files = captureDownloads();
+      await editPatched();
+      await page.getByLabelText('Title').fill('Patch');
+      const before = {
+        verdict: await settledVerdict(),
+        preview: previewImage(),
+        cutoff: (cutoffSlider().element() as HTMLInputElement).value,
+      };
+      await saveButton().click();
+      const file = await files[0]!;
+      expect(file.name).toBe('Patch.json');
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      await upload(await squareImage());
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      return { before, json: await file.blob.text() };
+    }
+
+    it('restores the creator exactly from a saved project', async () => {
+      const { before, json } = await editAndSave();
+      expect(JSON.parse(json).image).toMatch(/^data:image\/jpeg;base64,/);
+      await page.getByLabelText('Title').fill('');
+      await openProject(json);
+      await expect.element(page.getByLabelText('Title')).toHaveValue('Patch');
+      await expect.poll(previewImage).toBe(before.preview);
+      expect(await settledVerdict()).toBe(before.verdict);
+      await expect.element(cutoffSlider()).toHaveValue(before.cutoff);
+      await expect.element(widthSlider()).toBeEnabled();
+      expect(document.querySelector('.crop-box')).not.toBeNull();
+    });
+
+    it('scales the crop with a large embedded image', async () => {
+      const files = captureDownloads();
+      await upload(await png([[250, 100, 500, 300]], 1000, 500)); // the square image × 5
+      await page.getByRole('button', { name: '20', exact: true }).click(); // centred square crop
+      await expect
+        .element(page.getByText('Crop 500 × 500 px at (250, 0)'))
+        .toBeVisible();
+      const verdictText = await settledVerdict();
+      const before = previewImage();
+      await saveButton().click();
+      const json = await (await files[0]!).blob.text();
+      expect(JSON.parse(json).settings.crop).toEqual({
+        x: 125,
+        y: 0,
+        width: 250,
+        height: 250,
+      });
+      await upload(await diagonalImage());
+      await openProject(json);
+      await expect
+        .element(page.getByText('Crop 250 × 250 px at (125, 0)'))
+        .toBeVisible();
+      await expect.poll(previewImage).toBe(before);
+      expect(await settledVerdict()).toBe(verdictText);
+    });
+
+    it('restores the grid without the source image and says it is missing', async () => {
+      await upload(await squareImage());
+      await expect
+        .element(page.getByLabelText('Include source image'))
+        .toBeChecked();
+      root.unmount();
+      root = createRoot(container);
+      root.render(<App />);
+      const files = captureDownloads();
+      await editPatched();
+      await page.getByLabelText('Include source image').click();
+      const before = {
+        verdict: await settledVerdict(),
+        preview: previewImage(),
+      };
+      await saveButton().click();
+      const json = await (await files[0]!).blob.text();
+      expect(JSON.parse(json).image).toBeUndefined();
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      await upload(await squareImage());
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await openProject(json);
+      await expect
+        .element(page.getByText(/This project has no source image/))
+        .toBeVisible();
+      expect(await settledVerdict()).toBe(before.verdict);
+      await expect.poll(previewImage).toBe(before.preview);
+      await expect.element(widthSlider()).toBeDisabled();
+      expect(document.querySelector('.crop-box')).toBeNull();
+    });
+
+    it('shows an error for a bad file and changes nothing', async () => {
+      const { json } = await editAndSave();
+      const before = previewImage();
+      const file = JSON.parse(json);
+      await openProject(JSON.stringify({ ...file, version: 2 }));
+      await expect
+        .element(
+          page.getByText(
+            'This project is version 2; this app opens version 1.',
+          ),
+        )
+        .toBeVisible();
+      await openProject('{ broken');
+      await expect
+        .element(page.getByText(/isn't a valid project file \(problem: JSON\)/))
+        .toBeVisible();
+      const crop = { ...file.settings.crop, width: 1000 };
+      await openProject(
+        JSON.stringify({ ...file, settings: { ...file.settings, crop } }),
+      );
+      await expect
+        .element(page.getByText(/\(problem: settings\.crop\)/))
+        .toBeVisible();
+      expect(previewImage()).toBe(before);
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await expect.element(page.getByLabelText('Title')).toHaveValue('Patch');
     });
   });
 });

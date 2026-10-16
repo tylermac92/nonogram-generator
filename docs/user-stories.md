@@ -176,12 +176,12 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] SVG export opens correctly in a browser and in a vector editor, with clues, grid, and bold lines every 5 cells.
-- [ ] PNG export at each scale is sharp and matches the SVG.
-- [ ] Saving and then loading a project restores the creator exactly: crop, settings, edits, title, and verdict.
-- [ ] The "include source image" toggle defaults to on; with it off, loading still restores the grid and shows that the source is unavailable for re-cropping.
-- [ ] Loading a file with an unknown version or invalid structure shows a clear error and changes nothing.
-- [ ] Any verdict other than Valid shows a warning on export, but export stays possible.
+- [x] SVG export opens correctly in a browser and in a vector editor, with clues, grid, and bold lines every 5 cells.
+- [x] PNG export at each scale is sharp and matches the SVG.
+- [x] Saving and then loading a project restores the creator exactly: crop, settings, edits, title, and verdict.
+- [x] The "include source image" toggle defaults to on; with it off, loading still restores the grid and shows that the source is unavailable for re-cropping.
+- [x] Loading a file with an unknown version or invalid structure shows a clear error and changes nothing.
+- [x] Any verdict other than Valid shows a warning on export, but export stays possible.
 
 ### M13. Print view
 

@@ -7,7 +7,14 @@ import {
   otsu,
   toGray,
 } from '../core/image/pipeline.ts';
-import type { Rect, RgbaImage } from '../core/image/types.ts';
+import type { RgbaImage } from '../core/image/types.ts';
+import { download, toJpeg } from '../core/io/canvas.ts';
+import {
+  invalid,
+  parseProject,
+  serializeProject,
+  type Settings,
+} from '../core/io/project.ts';
 import { makePuzzle } from '../core/puzzle/clues.ts';
 import type { FixResult } from '../core/repair/autofix.ts';
 import {
@@ -17,26 +24,16 @@ import {
   type Suggestion,
 } from '../core/repair/suggest.ts';
 import { applyEdits, type Edits } from '../core/puzzle/grid.ts';
-import type { CellValue } from '../core/puzzle/types.ts';
+import type { CellValue, Grid } from '../core/puzzle/types.ts';
 import { squareCrop } from './crop.ts';
 import { CropBox } from './CropBox.tsx';
+import { Export } from './Export.tsx';
 import { historyOf, record, redo, undo } from './history.ts';
 import { gridSize } from './layout.ts';
 import { Preview, type Highlight } from './Preview.tsx';
 import { useSolver, type Check } from './useSolver.ts';
 import { useAutoFix } from './useAutoFix.ts';
 import { useSuggestions } from './useSuggestions.ts';
-
-/** Everything the creator's controls set; saved with the project in M12. */
-export interface Settings {
-  crop: Rect;
-  square: boolean;
-  width: number;
-  cutoff: number | null; // null = Auto (Otsu)
-  invert: boolean;
-  brightness: number;
-  contrast: number;
-}
 
 const DEFAULTS: Settings = {
   crop: { x: 0, y: 0, width: 1, height: 1 },
@@ -60,6 +57,13 @@ export function Creator() {
   const [settings, setSettings] = useState(DEFAULTS);
   const [history, setHistory] = useState(NO_EDITS);
   const [error, setError] = useState<string | null>(null);
+  const [title, setTitle] = useState('');
+  const [includeImage, setIncludeImage] = useState(true);
+  // A loaded project's grid, used as is until a setting changes.
+  const [loaded, setLoaded] = useState<{
+    grid: Grid;
+    settings: Settings;
+  } | null>(null);
   const latest = useRef(0);
   const update = (patch: Partial<Settings>) =>
     setSettings((s) => ({ ...s, ...patch }));
@@ -107,9 +111,14 @@ export function Creator() {
     () => values && adjust(values, brightness, contrast),
     [values, brightness, contrast],
   );
+  // A project's saved grid stands in for the pipeline until a setting changes:
+  // rebuilding it from the smaller embedded JPEG could flip cells.
   const grid = useMemo(
-    () => adjusted && binarize(adjusted, width, height, level, invert),
-    [adjusted, width, height, level, invert],
+    () =>
+      loaded?.settings === settings
+        ? loaded.grid
+        : adjusted && binarize(adjusted, width, height, level, invert),
+    [loaded, settings, adjusted, width, height, level, invert],
   );
   // Hand edits go on last, so they survive every slider and Invert.
   const edited = useMemo(() => grid && applyEdits(grid, edits), [grid, edits]);
@@ -209,6 +218,7 @@ export function Creator() {
       const decoded = await decodeImage(file);
       if (id !== latest.current) return;
       setImage(decoded);
+      setLoaded(null);
       setHistory(NO_EDITS);
       setSettings((s) => ({
         ...DEFAULTS,
@@ -220,6 +230,76 @@ export function Creator() {
       if (id === latest.current) {
         setError("Couldn't read this file. Try a JPEG or PNG.");
       }
+    }
+  }
+
+  const name = title.trim() || 'nonogram';
+  function save() {
+    if (!grid) return;
+    let saved = settings;
+    let embedded: string | undefined;
+    if (includeImage && image) {
+      const { url, scale } = toJpeg(image);
+      embedded = url;
+      const { x, y, width, height } = crop;
+      saved = {
+        ...settings,
+        crop: {
+          x: x * scale,
+          y: y * scale,
+          width: width * scale,
+          height: height * scale,
+        },
+      };
+    }
+    const json = serializeProject({
+      title,
+      settings: saved,
+      grid,
+      edits,
+      fixed,
+      ...(embedded && { image: embedded }),
+    });
+    download(new Blob([json], { type: 'application/json' }), `${name}.json`);
+  }
+
+  /** Checks the whole file before anything changes. */
+  async function openProject(file: File) {
+    const id = ++latest.current;
+    try {
+      const project = parseProject(await file.text());
+      let source: RgbaImage | null = null;
+      if (project.image) {
+        try {
+          source = await decodeImage(await (await fetch(project.image)).blob());
+        } catch {
+          throw invalid('image');
+        }
+      }
+      const { crop, width } = project.settings;
+      if (
+        source &&
+        (crop.x + crop.width > source.width ||
+          crop.y + crop.height > source.height)
+      ) {
+        throw invalid('settings.crop');
+      }
+      const size = gridSize(crop, width);
+      if (
+        size.width !== project.grid.width ||
+        size.height !== project.grid.height
+      ) {
+        throw invalid('grid');
+      }
+      if (id !== latest.current || !confirmClear()) return;
+      setImage(source);
+      setSettings(project.settings);
+      setLoaded({ grid: project.grid, settings: project.settings });
+      setHistory(historyOf({ edits: project.edits, fixed: project.fixed }));
+      setTitle(project.title);
+      setError(null);
+    } catch (e) {
+      if (id === latest.current) setError((e as Error).message);
     }
   }
 
@@ -246,6 +326,18 @@ export function Creator() {
           }}
         />{' '}
         or drop an image anywhere
+      </label>{' '}
+      <label>
+        Open project{' '}
+        <input
+          type="file"
+          accept=".json,application/json"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) void openProject(file);
+            e.target.value = '';
+          }}
+        />
       </label>
       <div className="workspace">
         {image && (
@@ -366,6 +458,12 @@ export function Creator() {
       <div role="status">
         {error && <p className="error">{error}</p>}
         {warning && <p>{warning}</p>}
+        {puzzle && !image && (
+          <p>
+            This project has no source image, so the crop and image settings
+            can&apos;t be changed. Hand edits still work.
+          </p>
+        )}
       </div>
       {puzzle ? (
         <>
@@ -453,6 +551,30 @@ export function Creator() {
             fixed={fixed}
             onPaint={paint}
           />
+          <label>
+            Title{' '}
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </label>
+          <Export puzzle={puzzle} name={name} warn={failing} />
+          <fieldset>
+            <legend>Project</legend>
+            <button type="button" onClick={save}>
+              Save project
+            </button>{' '}
+            <label>
+              <input
+                type="checkbox"
+                checked={includeImage && image !== null}
+                disabled={!image}
+                onChange={(e) => setIncludeImage(e.target.checked)}
+              />{' '}
+              Include source image
+            </label>
+          </fieldset>
         </>
       ) : (
         <div className="dropzone">Drop an image here or choose a file</div>
