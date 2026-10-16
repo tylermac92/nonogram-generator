@@ -188,7 +188,7 @@ Seventeen small milestones in build order; each ends in something you can run or
 
 - [x] **M12. SVG/PNG export and JSON project files.** Save and load round-trip.
   - Done when: a reloaded project matches the original exactly, including edits.
-- [ ] **M13. Print view.** Puzzle and solution pages, paper size and orientation, 5-cell rules.
+- [x] **M13. Print view.** Puzzle and solution pages, paper size and orientation, 5-cell rules.
   - Done when: a 50x50 prints legibly on one Letter or A4 page (landscape allowed).
 
 ### Phase 5 — Play and sharing

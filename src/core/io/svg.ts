@@ -3,7 +3,19 @@ import type { Puzzle } from '../puzzle/types.ts';
 
 export const CELL = 20;
 const PAD = 10;
-const FONT = 12;
+export const FONT = 15; // clue size; two digits still leave a gap between neighbours
+
+/** Where the grid starts, and the whole drawing's size, in SVG units. */
+export function svgSize({ width, height, rows, cols }: Puzzle) {
+  const left = PAD + Math.max(...rows.map((r) => clueLabels(r).length)) * CELL;
+  const top = PAD + Math.max(...cols.map((c) => clueLabels(c).length)) * CELL;
+  return {
+    left,
+    top,
+    width: left + width * CELL + PAD,
+    height: top + height * CELL + PAD,
+  };
+}
 
 /**
  * The puzzle as a standalone SVG: clues, grid, a bold line every 5 cells, and
@@ -14,14 +26,14 @@ export function renderSvg(puzzle: Puzzle, { solution = false } = {}): string {
   const { width: w, height: h, rows, cols } = puzzle;
   const rowLabels = rows.map(clueLabels);
   const colLabels = cols.map(clueLabels);
-  const left = PAD + Math.max(...rowLabels.map((l) => l.length)) * CELL;
-  const top = PAD + Math.max(...colLabels.map((l) => l.length)) * CELL;
+  const size = svgSize(puzzle);
+  const { left, top } = size;
   const right = left + w * CELL;
   const bottom = top + h * CELL;
   const baseline = 0.35 * FONT; // centres digits vertically without dominant-baseline
   const out = [
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${right + PAD}" height="${bottom + PAD}" viewBox="0 0 ${right + PAD} ${bottom + PAD}">`,
-    `<rect width="${right + PAD}" height="${bottom + PAD}" fill="#fff"/>`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${size.width}" height="${size.height}" viewBox="0 0 ${size.width} ${size.height}">`,
+    `<rect width="${size.width}" height="${size.height}" fill="#fff"/>`,
   ];
 
   if (solution) {

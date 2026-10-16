@@ -31,6 +31,7 @@ import { Export } from './Export.tsx';
 import { historyOf, record, redo, undo } from './history.ts';
 import { gridSize } from './layout.ts';
 import { Preview, type Highlight } from './Preview.tsx';
+import { PrintView } from './PrintView.tsx';
 import { useSolver, type Check } from './useSolver.ts';
 import { useAutoFix } from './useAutoFix.ts';
 import { useSuggestions } from './useSuggestions.ts';
@@ -59,6 +60,7 @@ export function Creator() {
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [includeImage, setIncludeImage] = useState(true);
+  const [printing, setPrinting] = useState(false);
   // A loaded project's grid, used as is until a setting changes.
   const [loaded, setLoaded] = useState<{
     grid: Grid;
@@ -304,282 +306,304 @@ export function Creator() {
   }
 
   return (
-    <main
-      className="creator"
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        const file = e.dataTransfer.files[0];
-        if (file) void open(file);
-      }}
-    >
-      <h1>Nonogram Generator</h1>
-      <label>
-        Image{' '}
-        <input
-          type="file"
-          accept="image/*"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void open(file);
-            e.target.value = '';
-          }}
-        />{' '}
-        or drop an image anywhere
-      </label>{' '}
-      <label>
-        Open project{' '}
-        <input
-          type="file"
-          accept=".json,application/json"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void openProject(file);
-            e.target.value = '';
-          }}
+    <>
+      {printing && puzzle && (
+        <PrintView
+          puzzle={puzzle}
+          title={title}
+          warn={failing}
+          onClose={() => setPrinting(false)}
         />
-      </label>
-      <div className="workspace">
-        {image && (
-          <CropBox
-            image={image}
-            crop={crop}
-            square={square}
-            onStart={() => {
-              if (edits.size === 0) return true;
-              // Asked before the drag: a dialog mid-drag swallows the pointerup.
-              if (confirmClear()) setHistory(NO_EDITS);
-              return false;
+      )}
+      <main
+        className="creator"
+        hidden={printing}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={(e) => {
+          e.preventDefault();
+          const file = e.dataTransfer.files[0];
+          if (file) void open(file);
+        }}
+      >
+        <h1>Nonogram Generator</h1>
+        <label>
+          Image{' '}
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void open(file);
+              e.target.value = '';
             }}
-            onChange={(crop) => resize({ crop })}
+          />{' '}
+          or drop an image anywhere
+        </label>{' '}
+        <label>
+          Open project{' '}
+          <input
+            type="file"
+            accept=".json,application/json"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void openProject(file);
+              e.target.value = '';
+            }}
           />
-        )}
-        <div className="controls">
-          <label>
-            Width {width}
-            {image && ` (height ${height})`}{' '}
-            <input
-              type="range"
-              min={5}
-              max={maxWidth}
-              value={width}
-              disabled={!image}
-              onChange={(e) => resize({ width: Number(e.target.value) })}
+        </label>
+        <div className="workspace">
+          {image && (
+            <CropBox
+              image={image}
+              crop={crop}
+              square={square}
+              onStart={() => {
+                if (edits.size === 0) return true;
+                // Asked before the drag: a dialog mid-drag swallows the pointerup.
+                if (confirmClear()) setHistory(NO_EDITS);
+                return false;
+              }}
+              onChange={(crop) => resize({ crop })}
             />
-          </label>
-          <div className="presets" role="group" aria-label="Size presets">
-            {PRESETS.map((n) => (
-              <button
-                key={n}
-                type="button"
+          )}
+          <div className="controls">
+            <label>
+              Width {width}
+              {image && ` (height ${height})`}{' '}
+              <input
+                type="range"
+                min={5}
+                max={maxWidth}
+                value={width}
                 disabled={!image}
-                onClick={() =>
-                  resize({
-                    width: n,
-                    square: true,
-                    crop: squareCrop(crop, image!.width, image!.height),
-                  })
-                }
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-          <label>
-            <input
-              type="checkbox"
-              checked={square}
-              disabled={!image}
-              onChange={(e) =>
-                e.target.checked
-                  ? resize({
+                onChange={(e) => resize({ width: Number(e.target.value) })}
+              />
+            </label>
+            <div className="presets" role="group" aria-label="Size presets">
+              {PRESETS.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  disabled={!image}
+                  onClick={() =>
+                    resize({
+                      width: n,
                       square: true,
                       crop: squareCrop(crop, image!.width, image!.height),
                     })
-                  : update({ square: false })
-              }
-            />{' '}
-            Lock to square
-          </label>
-          <span>
-            <label>
-              Cutoff {level}
-              {cutoff === null && ' (auto)'}{' '}
-              <input
-                type="range"
-                min={0}
-                max={255}
-                value={level}
-                disabled={!image}
-                onChange={(e) => update({ cutoff: Number(e.target.value) })}
-              />
-            </label>{' '}
-            <button
-              type="button"
-              disabled={!image || cutoff === null}
-              onClick={() => update({ cutoff: null })}
-            >
-              Auto
-            </button>
-          </span>
-          <label>
-            Brightness {brightness}{' '}
-            <input
-              type="range"
-              min={-100}
-              max={100}
-              value={brightness}
-              disabled={!image}
-              onChange={(e) => update({ brightness: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            Contrast {contrast}{' '}
-            <input
-              type="range"
-              min={-100}
-              max={100}
-              value={contrast}
-              disabled={!image}
-              onChange={(e) => update({ contrast: Number(e.target.value) })}
-            />
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={invert}
-              disabled={!image}
-              onChange={(e) => update({ invert: e.target.checked })}
-            />{' '}
-            Invert
-          </label>
-        </div>
-      </div>
-      <div role="status">
-        {error && <p className="error">{error}</p>}
-        {warning && <p>{warning}</p>}
-        {puzzle && !image && (
-          <p>
-            This project has no source image, so the crop and image settings
-            can&apos;t be changed. Hand edits still work.
-          </p>
-        )}
-      </div>
-      {puzzle ? (
-        <>
-          <p role="status" className={`verdict ${status.kind}`}>
-            {status.text}
-          </p>{' '}
-          <button
-            type="button"
-            disabled={history.past.length === 0}
-            onClick={() => setHistory(undo)}
-          >
-            Undo
-          </button>{' '}
-          <button
-            type="button"
-            disabled={history.future.length === 0}
-            onClick={() => setHistory(redo)}
-          >
-            Redo
-          </button>
-          {scan.state && (
-            <div className="suggestions" aria-live="polite">
-              {scan.state.status === 'scanning' && (
-                <p>
-                  Looking for nearby settings that pass…{' '}
-                  <button type="button" onClick={scan.cancel}>
-                    Cancel
-                  </button>
-                </p>
-              )}
-              {scan.state.status === 'cancelled' && <p>Search cancelled.</p>}
-              {scan.state.status === 'done' &&
-                (scan.state.suggestions.length === 0 ? (
-                  <p>
-                    No nearby settings pass. Try auto-fix, or edit the
-                    highlighted cells by hand.
-                  </p>
-                ) : (
-                  <p>
-                    These nearby settings pass:{' '}
-                    {scan.state.suggestions.map((s) => (
-                      <button
-                        key={`${s.width}-${s.cutoff}`}
-                        type="button"
-                        onClick={() => applySuggestion(s)}
-                      >
-                        Cutoff {s.cutoff}, width {s.width}
-                        {s.width !== width &&
-                          edits.size > 0 &&
-                          ' — clears your edits'}
-                      </button>
-                    ))}
-                  </p>
-                ))}
-              <p>
-                {fixer.running ? (
-                  <>
-                    Auto-fixing…
-                    {fixer.running.progress &&
-                      ` ${cells(fixer.running.progress.flips)} flipped, ${fixer.running.progress.undetermined} undetermined.`}{' '}
-                    <button type="button" onClick={fixer.cancel}>
-                      Cancel auto-fix
-                    </button>
-                  </>
-                ) : (
-                  <button type="button" onClick={startFix}>
-                    Auto-fix
-                  </button>
-                )}
-              </p>
+                  }
+                >
+                  {n}
+                </button>
+              ))}
             </div>
-          )}
-          {report?.state === history.present && (
-            <p role="status">{fixReport(report.result)}</p>
-          )}
-          <p className="hint">
-            Click or drag on the grid to edit cells, or use the arrow keys and
-            Space. Ctrl+Z undoes. Purple marks a cell auto-fix flipped; click it
-            to flip it back.
-          </p>
-          <Preview
-            puzzle={puzzle}
-            highlight={status.highlight}
-            edits={edits}
-            fixed={fixed}
-            onPaint={paint}
-          />
-          <label>
-            Title{' '}
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-            />
-          </label>
-          <Export puzzle={puzzle} name={name} warn={failing} />
-          <fieldset>
-            <legend>Project</legend>
-            <button type="button" onClick={save}>
-              Save project
-            </button>{' '}
             <label>
               <input
                 type="checkbox"
-                checked={includeImage && image !== null}
+                checked={square}
                 disabled={!image}
-                onChange={(e) => setIncludeImage(e.target.checked)}
+                onChange={(e) =>
+                  e.target.checked
+                    ? resize({
+                        square: true,
+                        crop: squareCrop(crop, image!.width, image!.height),
+                      })
+                    : update({ square: false })
+                }
               />{' '}
-              Include source image
+              Lock to square
             </label>
-          </fieldset>
-        </>
-      ) : (
-        <div className="dropzone">Drop an image here or choose a file</div>
-      )}
-    </main>
+            <span>
+              <label>
+                Cutoff {level}
+                {cutoff === null && ' (auto)'}{' '}
+                <input
+                  type="range"
+                  min={0}
+                  max={255}
+                  value={level}
+                  disabled={!image}
+                  onChange={(e) => update({ cutoff: Number(e.target.value) })}
+                />
+              </label>{' '}
+              <button
+                type="button"
+                disabled={!image || cutoff === null}
+                onClick={() => update({ cutoff: null })}
+              >
+                Auto
+              </button>
+            </span>
+            <label>
+              Brightness {brightness}{' '}
+              <input
+                type="range"
+                min={-100}
+                max={100}
+                value={brightness}
+                disabled={!image}
+                onChange={(e) => update({ brightness: Number(e.target.value) })}
+              />
+            </label>
+            <label>
+              Contrast {contrast}{' '}
+              <input
+                type="range"
+                min={-100}
+                max={100}
+                value={contrast}
+                disabled={!image}
+                onChange={(e) => update({ contrast: Number(e.target.value) })}
+              />
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={invert}
+                disabled={!image}
+                onChange={(e) => update({ invert: e.target.checked })}
+              />{' '}
+              Invert
+            </label>
+          </div>
+        </div>
+        <div role="status">
+          {error && <p className="error">{error}</p>}
+          {warning && <p>{warning}</p>}
+          {puzzle && !image && (
+            <p>
+              This project has no source image, so the crop and image settings
+              can&apos;t be changed. Hand edits still work.
+            </p>
+          )}
+        </div>
+        {puzzle ? (
+          <>
+            <p role="status" className={`verdict ${status.kind}`}>
+              {status.text}
+            </p>{' '}
+            <button
+              type="button"
+              disabled={history.past.length === 0}
+              onClick={() => setHistory(undo)}
+            >
+              Undo
+            </button>{' '}
+            <button
+              type="button"
+              disabled={history.future.length === 0}
+              onClick={() => setHistory(redo)}
+            >
+              Redo
+            </button>
+            {scan.state && (
+              <div className="suggestions" aria-live="polite">
+                {scan.state.status === 'scanning' && (
+                  <p>
+                    Looking for nearby settings that pass…{' '}
+                    <button type="button" onClick={scan.cancel}>
+                      Cancel
+                    </button>
+                  </p>
+                )}
+                {scan.state.status === 'cancelled' && <p>Search cancelled.</p>}
+                {scan.state.status === 'done' &&
+                  (scan.state.suggestions.length === 0 ? (
+                    <p>
+                      No nearby settings pass. Try auto-fix, or edit the
+                      highlighted cells by hand.
+                    </p>
+                  ) : (
+                    <p>
+                      These nearby settings pass:{' '}
+                      {scan.state.suggestions.map((s) => (
+                        <button
+                          key={`${s.width}-${s.cutoff}`}
+                          type="button"
+                          onClick={() => applySuggestion(s)}
+                        >
+                          Cutoff {s.cutoff}, width {s.width}
+                          {s.width !== width &&
+                            edits.size > 0 &&
+                            ' — clears your edits'}
+                        </button>
+                      ))}
+                    </p>
+                  ))}
+                <p>
+                  {fixer.running ? (
+                    <>
+                      Auto-fixing…
+                      {fixer.running.progress &&
+                        ` ${cells(fixer.running.progress.flips)} flipped, ${fixer.running.progress.undetermined} undetermined.`}{' '}
+                      <button type="button" onClick={fixer.cancel}>
+                        Cancel auto-fix
+                      </button>
+                    </>
+                  ) : (
+                    <button type="button" onClick={startFix}>
+                      Auto-fix
+                    </button>
+                  )}
+                </p>
+              </div>
+            )}
+            {report?.state === history.present && (
+              <p role="status">{fixReport(report.result)}</p>
+            )}
+            <p className="hint">
+              Click or drag on the grid to edit cells, or use the arrow keys and
+              Space. Ctrl+Z undoes. Purple marks a cell auto-fix flipped; click
+              it to flip it back.
+            </p>
+            <Preview
+              puzzle={puzzle}
+              highlight={status.highlight}
+              edits={edits}
+              fixed={fixed}
+              onPaint={paint}
+            />
+            <label>
+              Title{' '}
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </label>
+            <Export puzzle={puzzle} name={name} warn={failing} />
+            <p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPrinting(true);
+                  scrollTo(0, 0); // the button sits far down the creator
+                }}
+              >
+                Print…
+              </button>
+            </p>
+            <fieldset>
+              <legend>Project</legend>
+              <button type="button" onClick={save}>
+                Save project
+              </button>{' '}
+              <label>
+                <input
+                  type="checkbox"
+                  checked={includeImage && image !== null}
+                  disabled={!image}
+                  onChange={(e) => setIncludeImage(e.target.checked)}
+                />{' '}
+                Include source image
+              </label>
+            </fieldset>
+          </>
+        ) : (
+          <div className="dropzone">Drop an image here or choose a file</div>
+        )}
+      </main>
+    </>
   );
 }
 

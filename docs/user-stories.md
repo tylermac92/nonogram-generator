@@ -191,11 +191,11 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] Printing (or Save as PDF) produces exactly two pages: puzzle, then solution.
-- [ ] A 50x50 puzzle fits on one Letter or A4 page (landscape allowed), with clues at least 7 pt.
-- [ ] Bold rules appear every 5 cells, and the clue areas never overlap the grid.
-- [ ] Changing paper size or orientation updates the preview before printing.
-- [ ] No app UI (buttons, sliders, navigation) appears on the printed pages.
+- [x] Printing (or Save as PDF) produces exactly two pages: puzzle, then solution.
+- [x] A 50x50 puzzle fits on one Letter or A4 page (landscape allowed), with clues at least 7 pt.
+- [x] Bold rules appear every 5 cells, and the clue areas never overlap the grid.
+- [x] Changing paper size or orientation updates the preview before printing.
+- [x] No app UI (buttons, sliders, navigation) appears on the printed pages.
 
 ## Phase 5 — Play and sharing
 

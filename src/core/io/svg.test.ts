@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { makePuzzle } from '../puzzle/clues.ts';
 import { gridFromRows } from '../puzzle/grid.ts';
-import { CELL, renderSvg } from './svg.ts';
+import { CELL, FONT, renderSvg, svgSize } from './svg.ts';
 
 // 10x10: row 0 is "1 1 3", row 9 is empty, column 0 is "1 1".
 const rows = [
@@ -94,5 +94,29 @@ describe('renderSvg', () => {
       x: String(left),
       y: String(top + 2 * CELL),
     });
+  });
+
+  it('keeps two-digit clues clear of the grid and of each other', () => {
+    // 25x25: row 0 and column 0 are "12 11", so both clue areas hold two-digit pairs.
+    const line = '1'.repeat(12) + '0' + '1'.repeat(11) + '0';
+    const rows = Array.from({ length: 25 }, (_, y) =>
+      y === 0 ? line : line[y] + '0'.repeat(24),
+    );
+    const big = makePuzzle(gridFromRows(rows));
+    const svg = renderSvg(big);
+    const { left, top } = svgSize(big);
+    const half = (text: string) => (0.6 * FONT * text.length) / 2; // generous digit width
+    const placed = [
+      ...svg.matchAll(/<text x="([\d.]+)" y="([\d.]+)">(\d+)</g),
+    ].map((m) => ({ x: Number(m[1]), y: Number(m[2]), text: m[3]! }));
+    const rowClues = placed.filter((t) => t.x < left);
+    const colClues = placed.filter((t) => t.x > left);
+    expect(rowClues.length).toBeGreaterThan(25);
+    for (const t of rowClues) expect(t.x + half(t.text)).toBeLessThan(left);
+    for (const t of colClues) expect(t.y).toBeLessThan(top);
+    const [twelve, eleven] = rowClues;
+    expect(eleven!.x - half(eleven!.text)).toBeGreaterThan(
+      twelve!.x + half(twelve!.text),
+    );
   });
 });

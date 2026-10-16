@@ -170,3 +170,55 @@ fieldset button {
 .warning {
   color: #8a5a00;
 }
+
+.print-view {
+  min-height: 100vh;
+  padding: 16px;
+  background: #ddd;
+}
+
+.print-controls {
+  max-width: 1200px;
+  margin: 0 auto 16px;
+}
+
+.sheet {
+  box-sizing: border-box;
+  margin: 0 auto 16px;
+  padding: 10mm; /* MARGIN_MM */
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+
+.sheet h2 {
+  height: 10mm; /* HEADING_MM */
+  margin: 0;
+  font-size: 14pt;
+}
+
+.sheet svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+@media print {
+  .print-view {
+    padding: 0;
+    background: none;
+  }
+
+  .print-controls {
+    display: none;
+  }
+
+  .sheet {
+    margin: 0;
+    box-shadow: none;
+  }
+
+  .sheet:first-of-type {
+    break-after: page;
+  }
+}
