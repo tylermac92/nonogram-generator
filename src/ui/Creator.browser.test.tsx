@@ -7,6 +7,7 @@ import { makePuzzle } from '../core/puzzle/clues.ts';
 import type { Grid } from '../core/puzzle/types.ts';
 import { solve } from '../core/solver/solve.ts';
 import { autoFix } from '../core/repair/autofix.ts';
+import { decodeShare, encodeShare } from '../core/io/share.ts';
 import { gridFromRows } from '../core/puzzle/grid.ts';
 import { needsGuessing, randomGrid, wavesImage } from '../core/test-utils.ts';
 import App from './App.tsx';
@@ -201,6 +202,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   root.unmount();
   container.remove();
+  history.replaceState(null, '', location.pathname + location.search); // drop any #p= link
 });
 
 const upload = async (file: File) =>
@@ -1158,8 +1160,8 @@ describe('Creator', () => {
       await expect.element(solvedMessage()).toBeVisible();
     });
 
-    it('solves the 15×15 with the keyboard alone', async () => {
-      await openPlay();
+    /** Snakes through the rows with the arrow keys, pressing Space on filled cells. */
+    async function solveByKeyboard() {
       let keys = '';
       for (let y = 0; y < 15; y++) {
         for (let i = 0; i < 15; i++) {
@@ -1170,6 +1172,11 @@ describe('Creator', () => {
         keys += '{ArrowDown}';
       }
       await press(board(), keys);
+    }
+
+    it('solves the 15×15 with the keyboard alone', async () => {
+      await openPlay();
+      await solveByKeyboard();
       await expect.element(solvedMessage()).toBeVisible();
     });
 
@@ -1194,6 +1201,95 @@ describe('Creator', () => {
       await expect
         .element(page.getByRole('button', { name: 'Undo' }))
         .toBeEnabled();
+    });
+
+    describe('shared links', () => {
+      /** Renders the app afresh, as a browser opening this URL would. */
+      function openLink(fragment: string) {
+        root.unmount();
+        history.replaceState(
+          null,
+          '',
+          location.pathname + location.search + fragment,
+        );
+        root = createRoot(container);
+        root.render(<App />);
+      }
+      const creatorLink = () =>
+        page.getByRole('link', { name: /make your own puzzle/i });
+
+      it('copies a link to the current puzzle', async () => {
+        const write = vi
+          .spyOn(navigator.clipboard, 'writeText')
+          .mockResolvedValue();
+        await upload(await squareImage());
+        await expect.element(verdict(/^Valid/)).toBeVisible();
+        await page.getByRole('button', { name: 'Share link' }).click();
+        await expect.element(page.getByText('Link copied.')).toBeVisible();
+        const link = write.mock.calls[0]![0];
+        expect(
+          link.startsWith(location.origin + location.pathname + '#p='),
+        ).toBe(true);
+        const grid = decodeShare(link.split('#p=')[1]!);
+        expect([grid.width, grid.height]).toEqual([20, 10]);
+        // The 100×60 black rectangle: cells x 5–14, y 2–7.
+        expect(Array.from(grid.cells)).toEqual(
+          Array.from({ length: 200 }, (_, i) =>
+            i % 20 >= 5 && i % 20 <= 14 && i >= 40 && i < 160 ? 1 : 0,
+          ),
+        );
+      });
+
+      it('shows the link to copy by hand when the clipboard refuses', async () => {
+        vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(
+          new Error('denied'),
+        );
+        await upload(await squareImage());
+        await page.getByRole('button', { name: 'Share link' }).click();
+        await expect
+          .element(page.getByLabelText('Copy this link:'))
+          .toHaveValue(expect.stringContaining('#p='));
+      });
+
+      it('opens a link straight into play mode, and it can be solved', async () => {
+        openLink('#p=' + encodeShare(heart));
+        await expect.element(board()).toBeVisible();
+        expect(document.querySelector('.creator')).toBeNull();
+        await expect
+          .element(page.getByRole('heading', { name: 'Nonogram' }))
+          .toBeVisible();
+        await expect
+          .element(creatorLink())
+          .toHaveAttribute('href', location.pathname);
+        await expect
+          .poll(() => playCanvas().getBoundingClientRect().width)
+          .toBe(17 * 32 + 1);
+        await solveByKeyboard();
+        await expect.element(solvedMessage()).toBeVisible();
+      });
+
+      it('shows a friendly error for a truncated or corrupted link', async () => {
+        const payload = encodeShare(heart);
+        openLink('#p=' + payload.slice(0, -4));
+        await expect
+          .element(page.getByText(/link is broken or incomplete/))
+          .toBeVisible();
+        await expect.element(creatorLink()).toBeVisible();
+        const corrupted = payload[10] === 'A' ? 'B' : 'A';
+        openLink('#p=' + payload.slice(0, 10) + corrupted + payload.slice(11));
+        await expect
+          .element(page.getByText(/link is broken or incomplete/))
+          .toBeVisible();
+        expect(document.querySelector('canvas')).toBeNull();
+      });
+
+      it('switches to play when a link is pasted into an open tab', async () => {
+        // Mid-session, long after the app subscribed to hash changes.
+        await upload(await squareImage());
+        await expect.element(verdict(/^Valid/)).toBeVisible();
+        location.hash = '#p=' + encodeShare(heart); // no reload, just hashchange
+        await expect.element(board()).toBeVisible();
+      });
     });
   });
 });

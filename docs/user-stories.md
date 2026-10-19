@@ -224,12 +224,12 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] A Share button copies the link to the clipboard and confirms it.
-- [ ] A 50x50 link is about 420 characters, and the puzzle data sits after `#`, so it isn't sent to the server.
-- [ ] Opening the link in a fresh browser (no saved state) opens play mode with the correct puzzle.
-- [ ] Encoding then decoding round-trips exactly for all sizes from 5x5 to 50x50, including non-square grids (unit tests).
-- [ ] A corrupted or truncated link shows a friendly error with a link to the creator, never a blank page.
-- [ ] The solution isn't readable by eye from the link.
+- [x] A Share button copies the link to the clipboard and confirms it.
+- [x] A 50x50 link is about 420 characters, and the puzzle data sits after `#`, so it isn't sent to the server.
+- [x] Opening the link in a fresh browser (no saved state) opens play mode with the correct puzzle.
+- [x] Encoding then decoding round-trips exactly for all sizes from 5x5 to 50x50, including non-square grids (unit tests).
+- [x] A corrupted or truncated link shows a friendly error with a link to the creator, never a blank page.
+- [x] The solution isn't readable by eye from the link.
 
 ## Phase 6 — Polish
 

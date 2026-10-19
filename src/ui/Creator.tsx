@@ -15,6 +15,7 @@ import {
   serializeProject,
   type Settings,
 } from '../core/io/project.ts';
+import { encodeShare } from '../core/io/share.ts';
 import { makePuzzle } from '../core/puzzle/clues.ts';
 import type { FixResult } from '../core/repair/autofix.ts';
 import {
@@ -24,7 +25,7 @@ import {
   type Suggestion,
 } from '../core/repair/suggest.ts';
 import { applyEdits, type Edits } from '../core/puzzle/grid.ts';
-import type { CellValue, Grid } from '../core/puzzle/types.ts';
+import type { CellValue, Grid, Puzzle } from '../core/puzzle/types.ts';
 import { squareCrop } from './crop.ts';
 import { CropBox } from './CropBox.tsx';
 import { Export } from './Export.tsx';
@@ -64,6 +65,12 @@ export function Creator() {
   const [printing, setPrinting] = useState(false);
   const [playing, setPlaying] = useState(false);
   const away = printing || playing; // another view is showing
+  // The last Share result, shown while the puzzle it was made for is current.
+  const [shared, setShared] = useState<{
+    puzzle: Puzzle;
+    link: string;
+    copied: boolean;
+  } | null>(null);
   // A loaded project's grid, used as is until a setting changes.
   const [loaded, setLoaded] = useState<{
     grid: Grid;
@@ -240,6 +247,17 @@ export function Creator() {
   }
 
   const name = title.trim() || 'nonogram';
+  async function share() {
+    if (!puzzle) return;
+    const link = `${location.origin}${location.pathname}#p=${encodeShare(puzzle.solution)}`;
+    let copied = true;
+    try {
+      await navigator.clipboard.writeText(link); // absent on insecure pages; may be refused
+    } catch {
+      copied = false;
+    }
+    setShared({ puzzle, link, copied });
+  }
   function save() {
     if (!grid) return;
     let saved = settings;
@@ -601,8 +619,26 @@ export function Creator() {
                 }}
               >
                 Play this puzzle
+              </button>{' '}
+              <button type="button" onClick={() => void share()}>
+                Share link
               </button>
             </p>
+            {shared?.puzzle === puzzle &&
+              (shared.copied ? (
+                <p role="status">Link copied.</p>
+              ) : (
+                <p>
+                  <label>
+                    Copy this link:{' '}
+                    <input
+                      readOnly
+                      value={shared.link}
+                      onFocus={(e) => e.target.select()}
+                    />
+                  </label>
+                </p>
+              ))}
             <fieldset>
               <legend>Project</legend>
               <button type="button" onClick={save}>
