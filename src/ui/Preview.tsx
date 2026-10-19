@@ -22,6 +22,7 @@ import {
 
 const ZOOM_MIN_CELL = 4;
 const DONE_GREY = '#aaa';
+const CROSSHAIR = 'rgba(26, 115, 232, 0.15)';
 type Done = { rows: boolean[][]; cols: boolean[][] };
 const MAX_CANVAS_PIXELS = 16_000_000;
 const onZoom = (notify: () => void) => {
@@ -51,6 +52,7 @@ export function Preview({
   zoomable = false,
   onCancel,
   done,
+  crosshair = false,
   label = `Puzzle preview, ${puzzle.width} by ${puzzle.height}`,
 }: {
   puzzle: Puzzle;
@@ -69,6 +71,8 @@ export function Preview({
   onCancel?: () => void;
   /** Clue numbers to grey out, per line and number. */
   done?: Done;
+  /** Tint the row and column under the pointer, or the keyboard cursor. */
+  crosshair?: boolean;
   label?: string;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
@@ -76,6 +80,7 @@ export function Preview({
   const [available, setAvailable] = useState(0);
   const [cursor, setCursor] = useState(0);
   const [focused, setFocused] = useState(false);
+  const [hover, setHover] = useState<number | null>(null);
   const layout = useMemo(
     () =>
       previewLayout(puzzle, available, zoomable ? ZOOM_MIN_CELL : undefined),
@@ -113,6 +118,7 @@ export function Preview({
         focused && editable ? at : null,
         zoom,
         done,
+        crosshair ? (hover ?? (focused ? at : null)) : null,
       ),
     [
       puzzle,
@@ -126,6 +132,8 @@ export function Preview({
       editable,
       zoom,
       done,
+      crosshair,
+      hover,
     ],
   );
 
@@ -197,6 +205,13 @@ export function Preview({
         aria-label={label}
         tabIndex={editable ? 0 : undefined}
         onPointerDown={startPaint}
+        onPointerMove={(e) => {
+          if (!crosshair) return;
+          const rect = canvas.current!.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          setHover(cellAt(layout, puzzle, x, e.clientY - rect.top));
+        }}
+        onPointerLeave={() => setHover(null)}
         onContextMenu={(e) => editable && e.preventDefault()}
         onKeyDown={onKeyDown}
         onFocus={() => setFocused(true)}
@@ -217,6 +232,7 @@ function draw(
   cursor: number | null,
   zoom: number,
   done: Done | undefined,
+  lines: number | null, // the cell whose row and column to tint
 ) {
   const { width: w, height: h } = puzzle;
   // Device pixels for the zoomed size, within iOS Safari's canvas area limit.
@@ -252,6 +268,13 @@ function draw(
       ctx.fillRect(x, y, cell, cell);
     }
   });
+
+  if (lines !== null) {
+    const [x, y] = [lines % w, Math.floor(lines / w)];
+    ctx.fillStyle = CROSSHAIR;
+    ctx.fillRect(0, top + y * cell, left + w * cell, cell);
+    ctx.fillRect(left + x * cell, 0, cell, top + h * cell);
+  }
 
   ctx.fillStyle = highlight?.color ?? '';
   for (const i of highlight?.cells ?? []) {

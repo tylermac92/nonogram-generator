@@ -1391,6 +1391,36 @@ describe('Creator', () => {
         await expect.poll(clues).toEqual([0, 0]);
       });
 
+      /** Red at a cell's centre; negative x or y reach into the clues. */
+      function red(x: number, y: number) {
+        const canvas = playCanvas();
+        const dpr = window.devicePixelRatio;
+        const px = Math.round(canvas.width - dpr - (15 - x - 0.5) * 32 * dpr);
+        const py = Math.round(canvas.height - dpr - (15 - y - 0.5) * 32 * dpr);
+        return canvas.getContext('2d')!.getImageData(px, py, 1, 1).data[0];
+      }
+      const TINT = Math.round(255 * 0.85 + 26 * 0.15); // white under the 15% blue
+
+      it('tints the row and column under the mouse, or the keyboard cursor', async () => {
+        await openPlay();
+        playCanvas().dispatchEvent(
+          new PointerEvent('pointermove', { bubbles: true, ...at(7, 7) }),
+        );
+        // The board is still blank, so every cell is white unless tinted.
+        await expect.poll(() => red(0, 7)).toBe(TINT);
+        expect([red(7, 0), red(7, 14), red(-1, 7)]).toEqual([TINT, TINT, TINT]);
+        expect([red(0, 0), red(14, 14), red(0, 6)]).toEqual([255, 255, 255]);
+
+        playCanvas().dispatchEvent(
+          new PointerEvent('pointerout', { bubbles: true }),
+        );
+        await expect.poll(() => red(0, 7)).toBe(255);
+        await press(board(), '{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}');
+        await expect.poll(() => red(14, 4)).toBe(TINT); // row 4 from the cursor at (0, 4)
+        expect(red(0, 14)).toBe(TINT); // column 0
+        expect(red(14, 14)).toBe(255);
+      });
+
       it('ignores a second finger', async () => {
         await openPlay();
         const second = { ...primary, pointerId: 2, isPrimary: false };

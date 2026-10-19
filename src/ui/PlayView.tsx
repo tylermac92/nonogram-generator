@@ -142,6 +142,7 @@ export function PlayView({
         zoomable
         onCancel={cancelStroke}
         done={done}
+        crosshair
         label={`Puzzle board, ${puzzle.width} by ${puzzle.height}`}
       />
     </main>
