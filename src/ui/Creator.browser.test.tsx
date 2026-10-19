@@ -1361,6 +1361,36 @@ describe('Creator', () => {
         await expect.poll(() => state(5, 5)).toBe('empty');
       });
 
+      /** Darkest red value in a cell's box; negative x or y reach into the clues. */
+      function ink(x: number, y: number) {
+        const canvas = playCanvas();
+        const dpr = window.devicePixelRatio;
+        const px = canvas.width - dpr - (15 - x) * 32 * dpr;
+        const py = canvas.height - dpr - (15 - y) * 32 * dpr;
+        const { data } = canvas
+          .getContext('2d')!
+          .getImageData(px + 4 * dpr, py + 4 * dpr, 24 * dpr, 24 * dpr);
+        let min = 255;
+        for (let i = 0; i < data.length; i += 4) min = Math.min(min, data[i]!);
+        return min;
+      }
+
+      it('greys the clues of a completed row, and not once it breaks', async () => {
+        await openPlay();
+        const clues = () => [ink(-2, 1), ink(-1, 1)]; // row 1 is 3 3
+        await expect.poll(clues).toEqual([0, 0]);
+        playStroke({}, [2, 1], [4, 1]);
+        await expect.poll(() => state(4, 1)).toBe('filled');
+        expect(clues()).toEqual([0, 0]); // blanks on both sides: not closed yet
+        playStroke({ button: 2 }, [0, 1], [1, 1]);
+        click(5, 1, 2);
+        await expect.poll(clues).toEqual([0xaa, 0]); // closed by X marks
+        playStroke({}, [10, 1], [12, 1]);
+        await expect.poll(clues).toEqual([0xaa, 0xaa]);
+        click(5, 1);
+        await expect.poll(clues).toEqual([0, 0]);
+      });
+
       it('ignores a second finger', async () => {
         await openPlay();
         const second = { ...primary, pointerId: 2, isPrimary: false };

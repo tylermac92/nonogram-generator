@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  completedClues,
   CROSS,
   EMPTY,
   FILLED,
@@ -30,6 +31,20 @@ export function PlayView({
   const board = history.present;
   const solved = useMemo(() => isSolved(puzzle, board), [puzzle, board]);
   const wrong = check?.board === board ? check.wrong : null; // cleared by the next move
+  const done = useMemo(() => {
+    const { width: w, height: h } = puzzle;
+    return {
+      rows: puzzle.rows.map((runs, y) =>
+        completedClues(runs, board.subarray(y * w, (y + 1) * w)),
+      ),
+      cols: puzzle.cols.map((runs, x) =>
+        completedClues(
+          runs,
+          Array.from({ length: h }, (_, y) => board[y * w + x]!),
+        ),
+      ),
+    };
+  }, [puzzle, board]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -126,6 +141,7 @@ export function PlayView({
         lockAxis
         zoomable
         onCancel={cancelStroke}
+        done={done}
         label={`Puzzle board, ${puzzle.width} by ${puzzle.height}`}
       />
     </main>

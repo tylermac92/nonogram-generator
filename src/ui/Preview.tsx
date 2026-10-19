@@ -21,6 +21,8 @@ import {
 } from './layout.ts';
 
 const ZOOM_MIN_CELL = 4;
+const DONE_GREY = '#aaa';
+type Done = { rows: boolean[][]; cols: boolean[][] };
 const MAX_CANVAS_PIXELS = 16_000_000;
 const onZoom = (notify: () => void) => {
   visualViewport?.addEventListener('resize', notify);
@@ -48,6 +50,7 @@ export function Preview({
   lockAxis = false,
   zoomable = false,
   onCancel,
+  done,
   label = `Puzzle preview, ${puzzle.width} by ${puzzle.height}`,
 }: {
   puzzle: Puzzle;
@@ -64,6 +67,8 @@ export function Preview({
   zoomable?: boolean;
   /** A stroke was cut short, by a pinch starting: undo what it painted. */
   onCancel?: () => void;
+  /** Clue numbers to grey out, per line and number. */
+  done?: Done;
   label?: string;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
@@ -107,6 +112,7 @@ export function Preview({
         fixed,
         focused && editable ? at : null,
         zoom,
+        done,
       ),
     [
       puzzle,
@@ -119,6 +125,7 @@ export function Preview({
       at,
       editable,
       zoom,
+      done,
     ],
   );
 
@@ -209,6 +216,7 @@ function draw(
   fixed: ReadonlySet<number> = new Set(),
   cursor: number | null,
   zoom: number,
+  done: Done | undefined,
 ) {
   const { width: w, height: h } = puzzle;
   // Device pixels for the zoomed size, within iOS Safari's canvas area limit.
@@ -299,22 +307,24 @@ function draw(
   ctx.textBaseline = 'middle';
   puzzle.rows.forEach((runs, y) => {
     const labels = clueLabels(runs);
-    labels.forEach((label, i) =>
+    labels.forEach((label, i) => {
+      ctx.fillStyle = done?.rows[y]![i] ? DONE_GREY : '#000';
       ctx.fillText(
         label,
         left - (labels.length - i - 0.5) * cell,
         top + (y + 0.5) * cell,
-      ),
-    );
+      );
+    });
   });
   puzzle.cols.forEach((runs, x) => {
     const labels = clueLabels(runs);
-    labels.forEach((label, i) =>
+    labels.forEach((label, i) => {
+      ctx.fillStyle = done?.cols[x]![i] ? DONE_GREY : '#000';
       ctx.fillText(
         label,
         left + (x + 0.5) * cell,
         top - (labels.length - i - 0.5) * cell,
-      ),
-    );
+      );
+    });
   });
 }
