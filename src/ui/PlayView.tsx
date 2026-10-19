@@ -20,7 +20,7 @@ export function PlayView({
 }: {
   puzzle: Puzzle;
   title: string;
-  onClose: () => void;
+  onClose?: () => void; // absent for a shared link: offer the creator instead
 }) {
   const [history, setHistory] = useState(() =>
     historyOf(new Uint8Array(puzzle.width * puzzle.height)),
@@ -59,9 +59,13 @@ export function PlayView({
     <main className="play">
       <h1>{title.trim() || 'Nonogram'}</h1>
       <div className="play-controls">
-        <button type="button" onClick={onClose}>
-          Back to editor
-        </button>{' '}
+        {onClose ? (
+          <button type="button" onClick={onClose}>
+            Back to editor
+          </button>
+        ) : (
+          <a href={location.pathname}>Make your own puzzle</a>
+        )}{' '}
         <span role="group" aria-label="Tap to">
           <button
             type="button"

@@ -112,7 +112,7 @@ Every format is generated from the same `Puzzle` object, and the SVG renderer is
 | JSON project | Puzzle, crop rectangle, all settings, manual edits, title; optional embedded source image | Versioned schema (`version: 1`); reopening restores the creator exactly. The embedded image is a downscaled JPEG (≤ 512 px), toggle defaults to on |
 | Shareable URL | Opens straight into play mode | Puzzle in the URL *fragment* (`#p=…`), so it never reaches a server log: format byte, width, height, solution packed 8 cells/byte, base64url. A 50x50 grid ≈ 420 characters. Clues are rebuilt on load. A light XOR scramble stops casual spoilers; it is not security |
 
-Open question: whether the shareable URL should also carry a title (adds length; cap at 60 characters if yes).
+Decided in M15: shareable URLs carry no title, since a title often names the picture and would give the answer away.
 
 ## Play mode, devices, and creator extras
 
@@ -195,7 +195,7 @@ Seventeen small milestones in build order; each ends in something you can run or
 
 - [x] **M14. Basic play mode.** Fill, X, drag painting, undo/redo, Check, keyboard controls, Fill/X toggle on touch.
   - Done when: you can solve a 15x15 start to finish with mouse, keyboard, and on a phone.
-- [ ] **M15. Shareable URL.** Encode the puzzle in the fragment; links open in play mode.
+- [x] **M15. Shareable URL.** Encode the puzzle in the fragment; links open in play mode.
   - Done when: a 50x50 link is about 420 characters and opens correctly in a fresh browser. **v1 complete.**
 
 ### Phase 6 — Polish
