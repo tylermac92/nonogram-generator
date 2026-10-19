@@ -193,7 +193,7 @@ Seventeen small milestones in build order; each ends in something you can run or
 
 ### Phase 5 — Play and sharing
 
-- [ ] **M14. Basic play mode.** Fill, X, drag painting, undo/redo, Check, keyboard controls, Fill/X toggle on touch.
+- [x] **M14. Basic play mode.** Fill, X, drag painting, undo/redo, Check, keyboard controls, Fill/X toggle on touch.
   - Done when: you can solve a 15x15 start to finish with mouse, keyboard, and on a phone.
 - [ ] **M15. Shareable URL.** Encode the puzzle in the fragment; links open in play mode.
   - Done when: a 50x50 link is about 420 characters and opens correctly in a fresh browser. **v1 complete.**

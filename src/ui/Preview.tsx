@@ -6,10 +6,18 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
+import { CROSS } from '../core/puzzle/board.ts';
 import { clueLabels } from '../core/puzzle/clues.ts';
 import type { Edits } from '../core/puzzle/grid.ts';
 import type { CellValue, Puzzle } from '../core/puzzle/types.ts';
-import { cellAt, lineCells, previewLayout } from './layout.ts';
+import {
+  alongAxis,
+  axisOf,
+  cellAt,
+  lineCells,
+  previewLayout,
+  type Axis,
+} from './layout.ts';
 
 /** Cells to tint, drawn over the cell values. */
 export interface Highlight {
@@ -17,20 +25,32 @@ export interface Highlight {
   color: string;
 }
 
-/** The grid with its clues, drawn on one canvas; editable when `onPaint` is set. */
+/**
+ * The grid with its clues, drawn on one canvas; editable when `onPaint` is set.
+ * The creator shows the solution; play passes the player's board as `cells`.
+ */
 export function Preview({
   puzzle,
+  cells,
   highlight,
   edits,
   fixed,
   onPaint,
+  paintValue,
+  lockAxis = false,
+  label = `Puzzle preview, ${puzzle.width} by ${puzzle.height}`,
 }: {
   puzzle: Puzzle;
+  cells?: Uint8Array; // what to draw: 0 empty, 1 filled, CROSS; the solution by default
   highlight?: Highlight;
   edits?: Edits;
   fixed?: ReadonlySet<number>; // auto-fixed cells among the edits
   /** `start` is true for the first cell of a stroke: one undo step per stroke. */
   onPaint?: (cells: number[], value: CellValue, start: boolean) => void;
+  /** What a stroke paints, from its first cell; `mark` is the right button or X key. Null ignores it. */
+  paintValue?: (cell: number, mark: boolean) => CellValue | null;
+  lockAxis?: boolean; // a drag stays on the row or column it started along
+  label?: string;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -42,6 +62,9 @@ export function Preview({
     [puzzle, available],
   );
   const { width: w, height: h, solution } = puzzle;
+  const shown = cells ?? solution.cells;
+  const valueFor =
+    paintValue ?? ((i: number, mark: boolean) => (mark ? null : 1 - shown[i]!));
   const at = Math.min(cursor, w * h - 1); // the grid may have shrunk
   const editable = onPaint !== undefined;
 
@@ -58,29 +81,38 @@ export function Preview({
       draw(
         canvas.current!,
         puzzle,
+        shown,
         layout,
         highlight,
         edits,
         fixed,
         focused && editable ? at : null,
       ),
-    [puzzle, layout, highlight, edits, fixed, focused, at, editable],
+    [puzzle, shown, layout, highlight, edits, fixed, focused, at, editable],
   );
 
   function startPaint(e: PointerEvent) {
     const rect = canvas.current!.getBoundingClientRect();
     const cellUnder = (p: { clientX: number; clientY: number }) =>
       cellAt(layout, puzzle, p.clientX - rect.left, p.clientY - rect.top);
-    let last = cellUnder(e);
-    if (!onPaint || last === null) return;
+    const start = cellUnder(e);
+    if (!onPaint || start === null || e.button === 1) return;
+    const value = valueFor(start, e.button === 2);
+    if (value === null) return;
     e.preventDefault();
-    const value = 1 - solution.cells[last]!;
-    onPaint([last], value, true);
+    onPaint([start], value, true);
+    let last = start;
+    let axis: Axis | undefined;
     // Window listeners keep the stroke going when the pointer leaves the canvas.
     const move = (m: globalThis.PointerEvent) => {
-      const cell = cellUnder(m);
-      if (cell === null || cell === last) return;
-      onPaint(lineCells(last!, cell, w), value, false);
+      let cell = cellUnder(m);
+      if (cell === null) return;
+      if (lockAxis && cell !== start) {
+        axis ??= axisOf(start, cell, w);
+        cell = alongAxis(start, cell, w, axis);
+      }
+      if (cell === last) return;
+      onPaint(lineCells(last, cell, w), value, false);
       last = cell;
     };
     const end = () => {
@@ -95,9 +127,11 @@ export function Preview({
 
   function onKeyDown(e: KeyboardEvent) {
     if (!onPaint) return;
-    if (e.key === ' ' || e.key === 'Enter') {
+    const mark = e.key === 'x' || e.key === 'X';
+    if (mark || e.key === ' ' || e.key === 'Enter') {
       e.preventDefault();
-      onPaint([at], 1 - solution.cells[at]!, true);
+      const value = valueFor(at, mark);
+      if (value !== null) onPaint([at], value, true);
       return;
     }
     const [dx, dy] = (
@@ -120,9 +154,10 @@ export function Preview({
       <canvas
         ref={canvas}
         role="img"
-        aria-label={`Puzzle preview, ${w} by ${h}`}
+        aria-label={label}
         tabIndex={editable ? 0 : undefined}
         onPointerDown={startPaint}
+        onContextMenu={(e) => editable && e.preventDefault()}
         onKeyDown={onKeyDown}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
@@ -134,13 +169,14 @@ export function Preview({
 function draw(
   canvas: HTMLCanvasElement,
   puzzle: Puzzle,
+  shown: Uint8Array,
   { cell, clueCols, clueRows, width, height }: ReturnType<typeof previewLayout>,
   highlight: Highlight | undefined,
   edits: Edits = new Map(),
   fixed: ReadonlySet<number> = new Set(),
   cursor: number | null,
 ) {
-  const { width: w, height: h, solution } = puzzle;
+  const { width: w, height: h } = puzzle;
   const dpr = window.devicePixelRatio || 1;
   // One extra pixel so the outer border isn't clipped at the right and bottom edges.
   canvas.width = Math.round((width + 1) * dpr);
@@ -155,14 +191,19 @@ function draw(
   const left = clueCols * cell;
   const top = clueRows * cell;
   ctx.fillStyle = '#000';
-  solution.cells.forEach((value, i) => {
-    if (value) {
-      ctx.fillRect(
-        left + (i % w) * cell,
-        top + Math.floor(i / w) * cell,
-        cell,
-        cell,
-      );
+  ctx.strokeStyle = '#666';
+  ctx.lineWidth = Math.max(1, cell / 12);
+  shown.forEach((value, i) => {
+    const [x, y] = [left + (i % w) * cell, top + Math.floor(i / w) * cell];
+    if (value === CROSS) {
+      ctx.beginPath();
+      ctx.moveTo(x + cell / 4, y + cell / 4);
+      ctx.lineTo(x + (cell * 3) / 4, y + (cell * 3) / 4);
+      ctx.moveTo(x + (cell * 3) / 4, y + cell / 4);
+      ctx.lineTo(x + cell / 4, y + (cell * 3) / 4);
+      ctx.stroke();
+    } else if (value) {
+      ctx.fillRect(x, y, cell, cell);
     }
   });
 

@@ -207,14 +207,14 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] Left-click fills a cell, right-click marks X, and clicking again clears it.
-- [ ] Dragging paints along the row or column where the drag started, even if the pointer drifts diagonally.
-- [ ] On touch screens, tapping uses the current Fill/X mode, and the page doesn't scroll or zoom while painting.
-- [ ] Arrow keys move a visible cursor, Space fills, and X marks.
-- [ ] Undo and redo cover every move, including whole drag strokes as one step.
-- [ ] Check reports the number of wrong filled cells and can highlight them; X marks are never counted as wrong.
-- [ ] A correctly completed grid shows a solved message.
-- [ ] A 15x15 puzzle can be solved start to finish with mouse, keyboard, and on a phone.
+- [x] Left-click fills a cell, right-click marks X, and clicking again clears it.
+- [x] Dragging paints along the row or column where the drag started, even if the pointer drifts diagonally.
+- [x] On touch screens, tapping uses the current Fill/X mode, and the page doesn't scroll or zoom while painting.
+- [x] Arrow keys move a visible cursor, Space fills, and X marks.
+- [x] Undo and redo cover every move, including whole drag strokes as one step.
+- [x] Check reports the number of wrong filled cells and can highlight them; X marks are never counted as wrong.
+- [x] A correctly completed grid shows a solved message.
+- [x] A 15x15 puzzle can be solved start to finish with mouse, keyboard, and on a phone.
 
 ### M15. Shareable URL
 

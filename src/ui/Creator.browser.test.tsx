@@ -974,4 +974,226 @@ describe('Creator', () => {
         .toBeEnabled();
     });
   });
+
+  describe('play', () => {
+    const heart = gridFromRows([
+      '000000000000000',
+      '001110000011100',
+      '011111000111110',
+      '111111101111111',
+      '111111111111111',
+      '111111111111111',
+      '111111111111111',
+      '011111111111110',
+      '001111111111100',
+      '000111111111000',
+      '000011111110000',
+      '000001111100000',
+      '000000111000000',
+      '000000010000000',
+      '000000000000000',
+    ]);
+    const board = () =>
+      page.getByRole('img', { name: 'Puzzle board, 15 by 15' });
+    const playCanvas = () => board().element() as HTMLCanvasElement;
+    /** Centre pixel of a play cell: filled, X (grey cross) or empty. */
+    function state(x: number, y: number) {
+      const canvas = playCanvas();
+      const dpr = window.devicePixelRatio;
+      const px = Math.round(canvas.width - dpr - (15 - x - 0.5) * 32 * dpr);
+      const py = Math.round(canvas.height - dpr - (15 - y - 0.5) * 32 * dpr);
+      const [r] = canvas.getContext('2d')!.getImageData(px, py, 1, 1).data;
+      return r! < 50 ? 'filled' : r! > 200 ? 'empty' : 'x';
+    }
+    /** Presses on the first cell, moves through the rest, and releases ([x, y] on the 15×15 board). */
+    function playStroke(
+      options: { button?: number; pointerType?: string },
+      ...cells: [number, number][]
+    ) {
+      const rect = playCanvas().getBoundingClientRect();
+      const point = ([x, y]: [number, number]) => ({
+        clientX: rect.right - 1 - (15 - x - 0.5) * 32,
+        clientY: rect.bottom - 1 - (15 - y - 0.5) * 32,
+      });
+      const init = { bubbles: true, pointerId: 1, isPrimary: true, ...options };
+      const [first, ...rest] = cells;
+      playCanvas().dispatchEvent(
+        new PointerEvent('pointerdown', { ...init, ...point(first!) }),
+      );
+      for (const cell of rest) {
+        window.dispatchEvent(
+          new PointerEvent('pointermove', { ...init, ...point(cell) }),
+        );
+      }
+      window.dispatchEvent(new PointerEvent('pointerup', init));
+    }
+    const click = (x: number, y: number, button = 0) =>
+      playStroke({ button }, [x, y]);
+    /** Each run of each row as one stroke. */
+    function solveByStrokes(pointerType: string) {
+      for (let y = 0; y < 15; y++) {
+        let x = 0;
+        while (x < 15) {
+          if (!heart.cells[y * 15 + x]) {
+            x++;
+            continue;
+          }
+          const start = x;
+          while (x < 15 && heart.cells[y * 15 + x]) x++;
+          playStroke({ pointerType }, [start, y], [x - 1, y]);
+        }
+      }
+    }
+    const solvedMessage = () => page.getByText('Solved — well done!');
+
+    async function openPlay() {
+      await upload(await gridImage(heart));
+      await page.getByRole('button', { name: '15', exact: true }).click();
+      await expect.element(preview(15, 15)).toBeVisible();
+      await page.getByRole('button', { name: 'Play this puzzle' }).click();
+      await expect.element(board()).toBeVisible();
+      // Strokes assume 32 px cells: wait for the first resize (2 clue columns + 15 cells).
+      await expect
+        .poll(() => playCanvas().getBoundingClientRect().width)
+        .toBe(17 * 32 + 1);
+      expect(document.querySelector<HTMLElement>('.creator')!.hidden).toBe(
+        true,
+      );
+    }
+
+    it('fills with a click, marks X with a right-click, and clears on a second click', async () => {
+      await openPlay();
+      click(0, 0);
+      await expect.poll(() => state(0, 0)).toBe('filled');
+      click(0, 0);
+      await expect.poll(() => state(0, 0)).toBe('empty');
+      click(1, 0, 2);
+      await expect.poll(() => state(1, 0)).toBe('x');
+      click(1, 0, 2);
+      await expect.poll(() => state(1, 0)).toBe('empty');
+    });
+
+    it('keeps a drifting drag on the row it started along', async () => {
+      await openPlay();
+      playStroke({}, [0, 0], [3, 1], [5, 2]);
+      await expect
+        .poll(() => [0, 1, 2, 3, 4, 5].map((x) => state(x, 0)))
+        .toEqual(Array(6).fill('filled'));
+      expect([state(3, 1), state(5, 2), state(6, 0)]).toEqual([
+        'empty',
+        'empty',
+        'empty',
+      ]);
+    });
+
+    it('marks X by touch in X mode, without scrolling the page', async () => {
+      await openPlay();
+      expect(getComputedStyle(playCanvas()).touchAction).toBe('none');
+      await page.getByRole('button', { name: 'X', exact: true }).click();
+      const scroll = window.scrollY;
+      playStroke({ pointerType: 'touch' }, [0, 0], [2, 0]);
+      await expect
+        .poll(() => [0, 1, 2].map((x) => state(x, 0)))
+        .toEqual(['x', 'x', 'x']);
+      expect(window.scrollY).toBe(scroll);
+    });
+
+    it('moves a cursor with the arrow keys; Space fills and X marks', async () => {
+      await openPlay();
+      await press(board(), '{ArrowRight}{ArrowRight}{ArrowDown} ');
+      await expect.poll(() => state(2, 1)).toBe('filled');
+      await userEvent.keyboard('{ArrowRight}x');
+      await expect.poll(() => state(3, 1)).toBe('x');
+    });
+
+    it('undoes and redoes a whole stroke in one step each', async () => {
+      await openPlay();
+      playStroke({}, [0, 0], [4, 0]);
+      await expect.poll(() => state(4, 0)).toBe('filled');
+      await page.getByRole('button', { name: 'Undo' }).click();
+      await expect
+        .poll(() => [0, 4].map((x) => state(x, 0)))
+        .toEqual(['empty', 'empty']);
+      await expect
+        .element(page.getByRole('button', { name: 'Undo' }))
+        .toBeDisabled();
+      await userEvent.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+      await expect
+        .poll(() => [0, 4].map((x) => state(x, 0)))
+        .toEqual(['filled', 'filled']);
+    });
+
+    it('counts and highlights wrongly filled cells, never X marks', async () => {
+      await openPlay();
+      click(0, 0); // should be empty
+      click(14, 14); // should be empty
+      click(7, 7, 2); // X on a cell that should be filled
+      click(13, 0, 2); // X on a cell that should be empty
+      await page.getByRole('button', { name: 'Check' }).click();
+      await expect
+        .element(page.getByText('2 cells are filled wrongly (shown in red).'))
+        .toBeVisible();
+      const canvas = playCanvas();
+      const dpr = window.devicePixelRatio;
+      // Near the top-left corner of cell (0, 0), clear of its centre.
+      const px = Math.round(canvas.width - dpr - (15 - 0.2) * 32 * dpr);
+      const py = Math.round(canvas.height - dpr - (15 - 0.2) * 32 * dpr);
+      await expect
+        .poll(() =>
+          [...canvas.getContext('2d')!.getImageData(px, py, 1, 1).data].slice(
+            0,
+            3,
+          ),
+        )
+        .toEqual([115, 0, 0]);
+      click(0, 0); // the next move clears the report
+      await expect
+        .poll(() => page.getByText(/filled wrongly/).query())
+        .toBeNull();
+    });
+
+    it('solves the 15×15 with mouse strokes', async () => {
+      await openPlay();
+      solveByStrokes('mouse');
+      await expect.element(solvedMessage()).toBeVisible();
+    });
+
+    it('solves the 15×15 with the keyboard alone', async () => {
+      await openPlay();
+      let keys = '';
+      for (let y = 0; y < 15; y++) {
+        for (let i = 0; i < 15; i++) {
+          const x = y % 2 ? 14 - i : i; // snake through the rows
+          if (heart.cells[y * 15 + x]) keys += ' ';
+          if (i < 14) keys += y % 2 ? '{ArrowLeft}' : '{ArrowRight}';
+        }
+        keys += '{ArrowDown}';
+      }
+      await press(board(), keys);
+      await expect.element(solvedMessage()).toBeVisible();
+    });
+
+    it('solves the 15×15 with touch strokes', async () => {
+      await openPlay();
+      solveByStrokes('touch');
+      await expect.element(solvedMessage()).toBeVisible();
+    });
+
+    it('keeps play undo away from the creator', async () => {
+      await upload(await diagonalImage());
+      await expect.element(verdict(/^Ambiguous/)).toBeVisible();
+      stroke([0, 0]);
+      const verdictText = await settledVerdict();
+      await page.getByRole('button', { name: 'Play this puzzle' }).click();
+      await expect
+        .element(page.getByRole('img', { name: 'Puzzle board, 20 by 10' }))
+        .toBeVisible();
+      await userEvent.keyboard('{Control>}z{/Control}{Control>}z{/Control}');
+      await page.getByRole('button', { name: 'Back to editor' }).click();
+      expect(await settledVerdict()).toBe(verdictText);
+      await expect
+        .element(page.getByRole('button', { name: 'Undo' }))
+        .toBeEnabled();
+    });
+  });
 });
