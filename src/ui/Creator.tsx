@@ -26,6 +26,8 @@ import {
 } from '../core/repair/suggest.ts';
 import { applyEdits, type Edits } from '../core/puzzle/grid.ts';
 import type { CellValue, Grid, Puzzle } from '../core/puzzle/types.ts';
+import { difficulty } from '../core/solver/difficulty.ts';
+import { Compare } from './Compare.tsx';
 import { squareCrop } from './crop.ts';
 import { CropBox } from './CropBox.tsx';
 import { Export } from './Export.tsx';
@@ -37,6 +39,11 @@ import { PrintView } from './PrintView.tsx';
 import { useSolver, type Check } from './useSolver.ts';
 import { useAutoFix } from './useAutoFix.ts';
 import { useSuggestions } from './useSuggestions.ts';
+import cameraman from './samples/cameraman.jpg';
+import cat from './samples/cat.jpg';
+import horse from './samples/horse.jpg';
+import sailboat from './samples/sailboat.jpg';
+import skyline from './samples/skyline.jpg';
 
 const DEFAULTS: Settings = {
   crop: { x: 0, y: 0, width: 1, height: 1 },
@@ -48,6 +55,13 @@ const DEFAULTS: Settings = {
   contrast: 0,
 };
 const PRESETS = [10, 15, 20, 25, 30, 40, 50];
+const SAMPLES = {
+  Horse: horse,
+  Cameraman: cameraman,
+  Cat: cat,
+  Sailboat: sailboat,
+  Skyline: skyline,
+};
 /** One undo step: the edits, and which of them auto-fix made. */
 interface EditState {
   edits: Edits;
@@ -152,6 +166,7 @@ export function Creator() {
 
   const check = useSolver(puzzle);
   const status = useMemo(() => verdict(check), [check]);
+  const rating = check && difficulty(check.result);
 
   const failing = check !== null && check.result.status !== 'solved';
   const scanRequest = useMemo((): ScanRequest | null => {
@@ -224,7 +239,7 @@ export function Creator() {
         ? 'Nearly all cells are empty — the puzzle will be dull.'
         : null;
 
-  async function open(file: File) {
+  async function open(file: Blob) {
     if (!confirmClear()) return;
     const id = ++latest.current;
     try {
@@ -244,6 +259,14 @@ export function Creator() {
         setError("Couldn't read this file. Try a JPEG or PNG.");
       }
     }
+  }
+
+  function openSample(url: string) {
+    fetch(url)
+      .then((r) => r.blob())
+      .then(open, () =>
+        setError("Couldn't load the sample. Check your connection."),
+      );
   }
 
   const name = title.trim() || 'nonogram';
@@ -283,6 +306,7 @@ export function Creator() {
       edits,
       fixed,
       ...(embedded && { image: embedded }),
+      ...(rating && { difficulty: rating }),
     });
     download(new Blob([json], { type: 'application/json' }), `${name}.json`);
   }
@@ -334,6 +358,7 @@ export function Creator() {
           puzzle={puzzle}
           title={title}
           warn={failing}
+          difficulty={rating}
           onClose={() => setPrinting(false)}
         />
       )}
@@ -380,6 +405,21 @@ export function Creator() {
             }}
           />
         </label>
+        <div className="samples">
+          <span>Try a sample:</span>
+          <span>
+            {Object.entries(SAMPLES).map(([label, url]) => (
+              <button key={label} type="button" onClick={() => openSample(url)}>
+                <img src={url} alt={label} />
+              </button>
+            ))}
+          </span>
+          <p>
+            Pictures that work best: a dark subject on a plain, light
+            background; strong contrast; cropped tight around the subject. Use
+            Invert for a light subject on a dark background.
+          </p>
+        </div>
         <div className="workspace">
           {image && (
             <CropBox
@@ -511,6 +551,13 @@ export function Creator() {
             <p role="status" className={`verdict ${status.kind}`}>
               {status.text}
             </p>{' '}
+            {rating && (
+              <>
+                <span className="badge">
+                  Difficulty: {rating} (estimate)
+                </span>{' '}
+              </>
+            )}
             <button
               type="button"
               disabled={history.past.length === 0}
@@ -592,6 +639,9 @@ export function Creator() {
               fixed={fixed}
               onPaint={paint}
             />
+            {image && (
+              <Compare image={image} crop={crop} grid={puzzle.solution} />
+            )}
             <label>
               Title{' '}
               <input

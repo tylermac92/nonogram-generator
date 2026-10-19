@@ -1,6 +1,7 @@
 import type { Rect } from '../image/types.ts';
 import { gridFromRows, type Edits } from '../puzzle/grid.ts';
 import type { Grid } from '../puzzle/types.ts';
+import type { Difficulty } from '../solver/difficulty.ts';
 
 /** Everything the creator's controls set. */
 export interface Settings {
@@ -21,6 +22,7 @@ export interface Project {
   edits: Edits;
   fixed: ReadonlySet<number>; // auto-fixed cells among the edits
   image?: string; // JPEG data URL, at most 512 px
+  difficulty?: Difficulty; // written for readers of the file; never read back
 }
 
 export const VERSION = 1;

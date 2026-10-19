@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { renderSvg, svgSize } from '../core/io/svg.ts';
 import type { Puzzle } from '../core/puzzle/types.ts';
+import type { Difficulty } from '../core/solver/difficulty.ts';
 import {
   MIN_CLUE_PT,
   PAPERS,
@@ -14,18 +15,20 @@ export function PrintView({
   puzzle,
   title,
   warn,
+  difficulty,
   onClose,
 }: {
   puzzle: Puzzle;
   title: string;
   warn: boolean; // the verdict isn't Valid
+  difficulty: Difficulty | null;
   onClose: () => void;
 }) {
   const [paper, setPaper] = useState<Paper>('letter');
   const [orientation, setOrientation] = useState<Orientation>('portrait');
   const layout = printLayout(svgSize(puzzle), paper, orientation);
   const name = title.trim() || 'Nonogram';
-  const sheet = (heading: string, solution: boolean) => (
+  const sheet = (heading: ReactNode, solution: boolean) => (
     <section
       className="sheet"
       style={{
@@ -88,7 +91,13 @@ export function PrintView({
           </p>
         )}
       </div>
-      {sheet(name, false)}
+      {sheet(
+        <>
+          {name}
+          {difficulty && <small> · {difficulty} difficulty (estimate)</small>}
+        </>,
+        false,
+      )}
       {sheet(`${name} — Solution`, true)}
     </div>
   );

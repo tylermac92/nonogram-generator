@@ -179,11 +179,21 @@ const openProject = (text: string) =>
     page.getByLabelText('Open project'),
     new File([text], 'project.json', { type: 'application/json' }),
   );
-/** The verdict once the deep check, if any, has finished. */
+/** The verdict once the deep check, if any, has finished and the preview shows it. */
 async function settledVerdict() {
   await expect
     .poll(() => document.querySelector('.verdict')?.textContent ?? '')
     .toMatch(/^(Valid|Needs|Ambiguous|Inconclusive)/);
+  // The text updates a moment before the canvas redraws with the new tint.
+  let last = '';
+  await expect
+    .poll(() => {
+      const now = previewImage();
+      const same = now === last;
+      last = now;
+      return same;
+    })
+    .toBe(true);
   return document.querySelector('.verdict')!.textContent;
 }
 
@@ -921,12 +931,15 @@ describe('Creator', () => {
       await page.getByLabelText('Title').fill('Box');
       await openPrint();
       await expect
-        .element(page.getByRole('heading', { name: 'Box' }))
+        .element(page.getByRole('heading', { name: /^Box ·/ }))
         .toBeVisible();
       const [puzzle, solution] = sheets();
       expect(sheets()).toHaveLength(2);
       expect(filledRects(puzzle!)).toBe(0);
       expect(filledRects(solution!)).toBe(60);
+      expect(puzzle!.querySelector('h2')!.textContent).toBe(
+        'Box · Easy difficulty (estimate)',
+      );
       expect(solution!.querySelector('h2')!.textContent).toBe('Box — Solution');
       expect(document.querySelector<HTMLElement>('.creator')!.hidden).toBe(
         true,
@@ -963,6 +976,7 @@ describe('Creator', () => {
       await expect
         .element(page.getByText(/You can still print it/))
         .toBeVisible();
+      expect(sheets()[0]!.querySelector('h2')!.textContent).toBe('Nonogram');
       await page.getByRole('button', { name: 'Print', exact: true }).click();
       expect(print).toHaveBeenCalledOnce();
       await page.getByRole('button', { name: 'Back to editor' }).click();
@@ -1290,6 +1304,85 @@ describe('Creator', () => {
         location.hash = '#p=' + encodeShare(heart); // no reload, just hashchange
         await expect.element(board()).toBeVisible();
       });
+    });
+  });
+  describe('extras', () => {
+    const badge = () => page.getByText(/^Difficulty: /);
+    const pixel = (name: string, x: number, y: number) =>
+      (page.getByRole('img', { name }).element() as HTMLCanvasElement)
+        .getContext('2d')!
+        .getImageData(x, y, 1, 1).data[0]!;
+
+    it('shows a difficulty estimate only on a Valid puzzle', async () => {
+      await upload(await squareImage());
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await expect
+        .element(badge())
+        .toHaveTextContent('Difficulty: Easy (estimate)');
+      await upload(await diagonalImage());
+      await expect.element(verdict(/^Ambiguous/)).toBeVisible();
+      expect(badge().query()).toBeNull();
+    });
+
+    it('writes the difficulty into a saved project', async () => {
+      const files = captureDownloads();
+      await upload(await squareImage());
+      await expect.element(badge()).toBeVisible();
+      await page.getByRole('button', { name: 'Save project' }).click();
+      await expect.poll(() => files.length).toBe(1);
+      expect(JSON.parse(await (await files[0]!).blob.text()).difficulty).toBe(
+        'Easy',
+      );
+    });
+
+    it('loads a sample with one click, beside tips', async () => {
+      await expect.element(page.getByText(/strong contrast/)).toBeVisible();
+      const tips = page.getByText(/strong contrast/).element().textContent;
+      expect(tips).toMatch(/plain, light background.*cropped tight/);
+      await page.getByRole('button', { name: 'Horse' }).click();
+      await expect.element(preview(20, 16)).toBeVisible();
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      expect(document.querySelector('.crop-box')).not.toBeNull();
+    });
+
+    it('asks before a sample replaces edits', async () => {
+      await upload(await squareImage());
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      stroke([0, 0]);
+      const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      await page.getByRole('button', { name: 'Cat' }).click();
+      await expect.poll(() => ask.mock.calls.length).toBe(1);
+      await expect.element(preview(20, 10)).toBeVisible();
+      await expect
+        .element(page.getByRole('button', { name: 'Undo' }))
+        .toBeEnabled();
+    });
+
+    it('compares the crop with the grid, side by side or overlaid', async () => {
+      await upload(await squareImage()); // 200×100 → 20×10; 320×160 here, 16 px cells
+      await expect.element(verdict(/^Valid/)).toBeVisible();
+      await page.getByText('Compare with the photo').click();
+      const both = (x: number, y: number) => [
+        pixel('Photo crop', x, y),
+        pixel('Grid', x, y),
+      ];
+      await expect.poll(() => both(168, 88)).toEqual([0, 0]); // cell (10, 5): filled
+      expect(both(40, 88)).toEqual([255, 255]); // cell (2, 5): empty
+      expect(both(82, 88)).toEqual([0, 0]); // cell (5, 5), near its left edge: the square's first column
+      expect(both(78, 88)).toEqual([255, 255]); // cell (4, 5), near its right edge
+
+      const photo = page.getByRole('img', { name: 'Photo crop' }).element();
+      const grid = page.getByRole('img', { name: 'Grid' }).element();
+      const box = (e: Element) => e.getBoundingClientRect().toJSON();
+      expect(box(grid).left).toBeGreaterThan(box(photo).right - 1);
+      await page.getByLabelText('Overlay the grid on the photo').click();
+      expect(getComputedStyle(grid).opacity).toBe('0.5');
+      expect(box(grid)).toEqual(box(photo));
+
+      // A centred 100×100 crop at width 10: 320×320 here, 32 px cells.
+      await page.getByRole('button', { name: '10', exact: true }).click();
+      await expect.poll(() => both(16, 16)).toEqual([255, 255]); // row 0: above the square
+      expect(both(16, 100)).toEqual([0, 0]); // row 3, column 0: the crop's left edge is inside the square
     });
   });
 });

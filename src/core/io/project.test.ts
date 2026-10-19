@@ -31,6 +31,13 @@ describe('project files', () => {
     expect(parseProject(serializeProject(noImage))).toEqual(noImage);
   });
 
+  it('writes the difficulty when given, and ignores it when reading', () => {
+    expect(saved().difficulty).toBeUndefined();
+    const rated = serializeProject({ ...project, difficulty: 'Hard' });
+    expect(JSON.parse(rated).difficulty).toBe('Hard');
+    expect(parseProject(rated)).toEqual(project);
+  });
+
   it('writes the grid as readable rows', () => {
     expect(saved().grid).toHaveLength(10);
     expect(saved().grid[0]).toMatch(/^[01]{20}$/);

@@ -84,7 +84,7 @@ A puzzle passes when the line solver alone fills every cell: that proves the sol
 
 Only Valid counts as passing; export stays available for the other verdicts, behind a warning.
 
-**Difficulty rating.** A heuristic from the line solver's trace: number of rounds needed, scaled by grid size, mapped to Easy / Medium / Hard / Expert. Tune the thresholds against the bundled sample puzzles and label the rating as an estimate.
+**Difficulty rating.** A heuristic from the line solver's trace: number of rounds needed, scaled by grid size, mapped to Easy / Medium / Hard / Expert. Tune the thresholds against the bundled sample puzzles and label the rating as an estimate. Decided in M16: the score is √(width × height) times the average round in which a cell is fixed, with Easy below 20, Medium below 35, Hard below 55, and Expert above that.
 
 ## Repair tools
 
