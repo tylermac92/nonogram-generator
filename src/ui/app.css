@@ -291,6 +291,10 @@ fieldset button {
   padding: 16px;
 }
 
+.play .preview canvas {
+  touch-action: pinch-zoom; /* one finger paints; two fingers zoom and pan the page */
+}
+
 .play-controls button {
   margin-right: 4px;
 }

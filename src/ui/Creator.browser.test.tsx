@@ -213,10 +213,23 @@ afterEach(() => {
   root.unmount();
   container.remove();
   history.replaceState(null, '', location.pathname + location.search); // drop any #p= link
+  localStorage.clear(); // saved play progress
 });
 
 const upload = async (file: File) =>
   userEvent.upload(page.getByLabelText(/Image/), file);
+
+/** Renders the app afresh, as a browser opening this URL would. */
+function openLink(fragment: string) {
+  root.unmount();
+  history.replaceState(
+    null,
+    '',
+    location.pathname + location.search + fragment,
+  );
+  root = createRoot(container);
+  root.render(<App />);
+}
 
 describe('Creator', () => {
   it('shows a preview within 1 second of choosing an image', async () => {
@@ -1104,7 +1117,8 @@ describe('Creator', () => {
 
     it('marks X by touch in X mode, without scrolling the page', async () => {
       await openPlay();
-      expect(getComputedStyle(playCanvas()).touchAction).toBe('none');
+      // One finger can't pan: it paints. Two fingers are left to the browser.
+      expect(getComputedStyle(playCanvas()).touchAction).toBe('pinch-zoom');
       await page.getByRole('button', { name: 'X', exact: true }).click();
       const scroll = window.scrollY;
       playStroke({ pointerType: 'touch' }, [0, 0], [2, 0]);
@@ -1218,17 +1232,6 @@ describe('Creator', () => {
     });
 
     describe('shared links', () => {
-      /** Renders the app afresh, as a browser opening this URL would. */
-      function openLink(fragment: string) {
-        root.unmount();
-        history.replaceState(
-          null,
-          '',
-          location.pathname + location.search + fragment,
-        );
-        root = createRoot(container);
-        root.render(<App />);
-      }
       const creatorLink = () =>
         page.getByRole('link', { name: /make your own puzzle/i });
 
@@ -1303,6 +1306,71 @@ describe('Creator', () => {
         await expect.element(verdict(/^Valid/)).toBeVisible();
         location.hash = '#p=' + encodeShare(heart); // no reload, just hashchange
         await expect.element(board()).toBeVisible();
+      });
+    });
+
+    describe('comfort', () => {
+      /** Screen point at the centre of a cell of the 15×15 board (32 px cells). */
+      const at = (x: number, y: number) => {
+        const rect = playCanvas().getBoundingClientRect();
+        return {
+          clientX: rect.right - 1 - (15 - x - 0.5) * 32,
+          clientY: rect.bottom - 1 - (15 - y - 0.5) * 32,
+        };
+      };
+      const primary = { bubbles: true, pointerId: 1, isPrimary: true };
+      const undoButton = () => page.getByRole('button', { name: 'Undo' });
+      const redoButton = () => page.getByRole('button', { name: 'Redo' });
+
+      it('lets the browser pinch-zoom the play board, not the creator', async () => {
+        await openPlay();
+        expect(getComputedStyle(playCanvas()).touchAction).toBe('pinch-zoom');
+        await page.getByRole('button', { name: 'Back to editor' }).click();
+        const creatorCanvas = preview(15, 15).element();
+        expect(getComputedStyle(creatorCanvas).touchAction).toBe('none');
+      });
+
+      it('fits a 50x50 board to a phone-width screen', async () => {
+        container.style.width = '343px';
+        openLink('#p=' + encodeShare(randomGrid(50, 50, 1)));
+        const big = page.getByRole('img', { name: 'Puzzle board, 50 by 50' });
+        await expect.element(big).toBeVisible();
+        const width = () => big.element().getBoundingClientRect().width;
+        await expect.poll(width).toBeLessThanOrEqual(343);
+        expect(width()).toBeGreaterThan(250);
+      });
+
+      it('drops a stroke that a pinch cuts short', async () => {
+        await openPlay();
+        click(5, 5);
+        await expect.poll(() => state(5, 5)).toBe('filled');
+        playCanvas().dispatchEvent(
+          new PointerEvent('pointerdown', { ...primary, ...at(0, 0) }),
+        );
+        window.dispatchEvent(
+          new PointerEvent('pointermove', { ...primary, ...at(2, 0) }),
+        );
+        await expect.poll(() => state(2, 0)).toBe('filled');
+        window.dispatchEvent(new PointerEvent('pointercancel', primary));
+        await expect
+          .poll(() => [0, 1, 2].map((x) => state(x, 0)))
+          .toEqual(['empty', 'empty', 'empty']);
+        expect(state(5, 5)).toBe('filled'); // the stroke before it stays
+        await expect.element(redoButton()).toBeDisabled();
+        await undoButton().click();
+        await expect.poll(() => state(5, 5)).toBe('empty');
+      });
+
+      it('ignores a second finger', async () => {
+        await openPlay();
+        const second = { ...primary, pointerId: 2, isPrimary: false };
+        playCanvas().dispatchEvent(
+          new PointerEvent('pointerdown', { ...second, ...at(3, 3) }),
+        );
+        window.dispatchEvent(new PointerEvent('pointerup', second));
+        await new Promise((r) => setTimeout(r, 100));
+        expect(state(3, 3)).toBe('empty');
+        await expect.element(undoButton()).toBeDisabled();
       });
     });
   });

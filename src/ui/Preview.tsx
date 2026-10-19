@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
@@ -18,6 +19,13 @@ import {
   previewLayout,
   type Axis,
 } from './layout.ts';
+
+const ZOOM_MIN_CELL = 4;
+const MAX_CANVAS_PIXELS = 16_000_000;
+const onZoom = (notify: () => void) => {
+  visualViewport?.addEventListener('resize', notify);
+  return () => visualViewport?.removeEventListener('resize', notify);
+};
 
 /** Cells to tint, drawn over the cell values. */
 export interface Highlight {
@@ -38,6 +46,8 @@ export function Preview({
   onPaint,
   paintValue,
   lockAxis = false,
+  zoomable = false,
+  onCancel,
   label = `Puzzle preview, ${puzzle.width} by ${puzzle.height}`,
 }: {
   puzzle: Puzzle;
@@ -50,6 +60,10 @@ export function Preview({
   /** What a stroke paints, from its first cell; `mark` is the right button or X key. Null ignores it. */
   paintValue?: (cell: number, mark: boolean) => CellValue | null;
   lockAxis?: boolean; // a drag stays on the row or column it started along
+  /** Play on phones: fits any board to the width, and stays sharp under the browser's pinch-zoom. */
+  zoomable?: boolean;
+  /** A stroke was cut short, by a pinch starting: undo what it painted. */
+  onCancel?: () => void;
   label?: string;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
@@ -58,8 +72,13 @@ export function Preview({
   const [cursor, setCursor] = useState(0);
   const [focused, setFocused] = useState(false);
   const layout = useMemo(
-    () => previewLayout(puzzle, available),
-    [puzzle, available],
+    () =>
+      previewLayout(puzzle, available, zoomable ? ZOOM_MIN_CELL : undefined),
+    [puzzle, available, zoomable],
+  );
+  const zoom = useSyncExternalStore(onZoom, () =>
+    // Half steps, so a pinch redraws a few times rather than every frame.
+    zoomable ? Math.ceil((visualViewport?.scale ?? 1) * 2) / 2 : 1,
   );
   const { width: w, height: h, solution } = puzzle;
   const shown = cells ?? solution.cells;
@@ -87,8 +106,20 @@ export function Preview({
         edits,
         fixed,
         focused && editable ? at : null,
+        zoom,
       ),
-    [puzzle, shown, layout, highlight, edits, fixed, focused, at, editable],
+    [
+      puzzle,
+      shown,
+      layout,
+      highlight,
+      edits,
+      fixed,
+      focused,
+      at,
+      editable,
+      zoom,
+    ],
   );
 
   function startPaint(e: PointerEvent) {
@@ -96,7 +127,8 @@ export function Preview({
     const cellUnder = (p: { clientX: number; clientY: number }) =>
       cellAt(layout, puzzle, p.clientX - rect.left, p.clientY - rect.top);
     const start = cellUnder(e);
-    if (!onPaint || start === null || e.button === 1) return;
+    // A second finger is the start of a pinch, not a stroke.
+    if (!onPaint || start === null || e.button === 1 || !e.isPrimary) return;
     const value = valueFor(start, e.button === 2);
     if (value === null) return;
     e.preventDefault();
@@ -115,10 +147,11 @@ export function Preview({
       onPaint(lineCells(last, cell, w), value, false);
       last = cell;
     };
-    const end = () => {
+    const end = (e: globalThis.PointerEvent) => {
       removeEventListener('pointermove', move);
       removeEventListener('pointerup', end);
       removeEventListener('pointercancel', end);
+      if (e.type === 'pointercancel') onCancel?.();
     };
     addEventListener('pointermove', move);
     addEventListener('pointerup', end);
@@ -175,9 +208,14 @@ function draw(
   edits: Edits = new Map(),
   fixed: ReadonlySet<number> = new Set(),
   cursor: number | null,
+  zoom: number,
 ) {
   const { width: w, height: h } = puzzle;
-  const dpr = window.devicePixelRatio || 1;
+  // Device pixels for the zoomed size, within iOS Safari's canvas area limit.
+  const dpr = Math.min(
+    (window.devicePixelRatio || 1) * zoom,
+    Math.sqrt(MAX_CANVAS_PIXELS / ((width + 1) * (height + 1))),
+  );
   // One extra pixel so the outer border isn't clipped at the right and bottom edges.
   canvas.width = Math.round((width + 1) * dpr);
   canvas.height = Math.round((height + 1) * dpr);

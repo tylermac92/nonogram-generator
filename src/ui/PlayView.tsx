@@ -48,6 +48,8 @@ export function PlayView({
       return start ? record(h, next) : { ...h, present: next };
     });
   }
+  /** Drops a stroke a pinch interrupted, as if it never happened. */
+  const cancelStroke = () => setHistory((h) => ({ ...undo(h), future: [] }));
   /** Fill (or X) the stroke, or clear it if its first cell already has that. */
   function paintValue(cell: number, mark: boolean) {
     const target = mark || mode === 'x' ? CROSS : FILLED;
@@ -122,6 +124,8 @@ export function PlayView({
         onPaint={paint}
         paintValue={paintValue}
         lockAxis
+        zoomable
+        onCancel={cancelStroke}
         label={`Puzzle board, ${puzzle.width} by ${puzzle.height}`}
       />
     </main>

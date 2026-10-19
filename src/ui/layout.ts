@@ -24,15 +24,20 @@ export function gridSize(crop: Rect, width: number) {
 
 /**
  * Canvas layout in CSS pixels. Clue areas get one cell per number of the
- * longest clue (at least one, for "0"); cells shrink to fit but never below 14 px.
+ * longest clue (at least one, for "0"); cells shrink to fit but never below
+ * `minCell` (14 px unless the board can be pinch-zoomed).
  */
-export function previewLayout(puzzle: Puzzle, availableWidth: number) {
+export function previewLayout(
+  puzzle: Puzzle,
+  availableWidth: number,
+  minCell = MIN_CELL,
+) {
   const longest = (lines: Puzzle['rows']) =>
     Math.max(1, ...lines.map((runs) => runs.length));
   const clueCols = longest(puzzle.rows);
   const clueRows = longest(puzzle.cols);
   const fit = Math.floor(availableWidth / (puzzle.width + clueCols));
-  const cell = Math.min(MAX_CELL, Math.max(MIN_CELL, fit));
+  const cell = Math.min(MAX_CELL, Math.max(minCell, fit));
   return {
     cell,
     clueCols,
