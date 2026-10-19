@@ -259,9 +259,9 @@ One user story per milestone from the project spec, each with a description and 
 
 **Acceptance criteria:**
 
-- [ ] **Zoom and pan:** pinch-zoom and two-finger pan work on phones, and one-finger drags still paint. A 50x50 puzzle is playable on a phone.
-- [ ] **Clue grey-out:** a clue number greys out when its run is complete in that line, and returns to normal if the run is broken.
-- [ ] **Highlight:** the row and column under the cursor or keyboard focus are highlighted.
-- [ ] **Timer:** starts on the first move, pauses when the tab is hidden, and stops when the puzzle is solved.
-- [ ] **Autosave:** progress (cells, X marks, timer) is saved to `localStorage` under a hash of the puzzle and restored when the same link or puzzle reopens, with a Reset option.
-- [ ] **Win animation:** plays once on completion, is skippable, and respects the reduced-motion setting.
+- [x] **Zoom and pan:** pinch-zoom and two-finger pan work on phones, and one-finger drags still paint. A 50x50 puzzle is playable on a phone.
+- [x] **Clue grey-out:** a clue number greys out when its run is complete in that line, and returns to normal if the run is broken.
+- [x] **Highlight:** the row and column under the cursor or keyboard focus are highlighted.
+- [x] **Timer:** starts on the first move, pauses when the tab is hidden, and stops when the puzzle is solved.
+- [x] **Autosave:** progress (cells, X marks, timer) is saved to `localStorage` under a hash of the puzzle and restored when the same link or puzzle reopens, with a Reset option.
+- [x] **Win animation:** plays once on completion, is skippable, and respects the reduced-motion setting.

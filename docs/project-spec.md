@@ -202,7 +202,7 @@ Seventeen small milestones in build order; each ends in something you can run or
 
 - [ ] **M16. Creator extras.** Difficulty badge, sample images with tips, compare and overlay view.
   - Done when: ratings across the samples feel sensibly ordered.
-- [ ] **M17. Comfort play.** Pinch-zoom and pan, greyed-out clues, row/column highlight, timer, autosave, win animation; ship each one separately.
+- [x] **M17. Comfort play.** Pinch-zoom and pan, greyed-out clues, row/column highlight, timer, autosave, win animation; ship each one separately.
   - Done when: a 50x50 is playable on a phone.
 
 After M17, pick from Out of scope; color puzzles or solver hints are the natural next steps.

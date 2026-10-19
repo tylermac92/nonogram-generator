@@ -1336,9 +1336,13 @@ describe('Creator', () => {
         openLink('#p=' + encodeShare(randomGrid(50, 50, 1)));
         const big = page.getByRole('img', { name: 'Puzzle board, 50 by 50' });
         await expect.element(big).toBeVisible();
-        const width = () => big.element().getBoundingClientRect().width;
-        await expect.poll(width).toBeLessThanOrEqual(343);
-        expect(width()).toBeGreaterThan(250);
+        // Once drawn (an undrawn canvas is a default 300 px wide): nearly the full width, no wider.
+        const fits = () => {
+          const canvas = big.element() as HTMLCanvasElement;
+          const width = canvas.getBoundingClientRect().width;
+          return canvas.style.width !== '' && width > 250 && width <= 343;
+        };
+        await expect.poll(fits).toBe(true);
       });
 
       it('drops a stroke that a pinch cuts short', async () => {
