@@ -1421,6 +1421,47 @@ describe('Creator', () => {
         expect(red(14, 14)).toBe(255);
       });
 
+      const timer = () => page.getByRole('timer').element().textContent;
+      /** Fakes the tab being hidden or shown again. */
+      function setHidden(hidden: boolean) {
+        if (hidden) {
+          Object.defineProperty(document, 'visibilityState', {
+            configurable: true,
+            get: () => 'hidden',
+          });
+        } else {
+          delete (document as { visibilityState?: unknown }).visibilityState;
+        }
+        document.dispatchEvent(new Event('visibilitychange'));
+      }
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+      it('times from the first move, pausing while the tab is hidden', async () => {
+        await openPlay();
+        await wait(1200);
+        expect(timer()).toBe('0:00'); // no move yet
+        click(0, 0);
+        await expect.poll(timer, { timeout: 2000 }).toBe('0:01');
+        setHidden(true);
+        try {
+          const paused = timer();
+          await wait(1500);
+          expect(timer()).toBe(paused);
+        } finally {
+          setHidden(false);
+        }
+        await expect.poll(timer, { timeout: 2000 }).toBe('0:02');
+      });
+
+      it('stops the timer once solved', async () => {
+        await openPlay();
+        solveByStrokes('mouse');
+        await expect.element(solvedMessage()).toBeVisible();
+        const final = timer();
+        await wait(1500);
+        expect(timer()).toBe(final);
+      });
+
       it('ignores a second finger', async () => {
         await openPlay();
         const second = { ...primary, pointerId: 2, isPrimary: false };

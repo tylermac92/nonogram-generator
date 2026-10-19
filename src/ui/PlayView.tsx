@@ -10,6 +10,7 @@ import {
 import type { CellValue, Puzzle } from '../core/puzzle/types.ts';
 import { historyOf, record, redo, undo } from './history.ts';
 import { Preview } from './Preview.tsx';
+import { clock, useTimer } from './useTimer.ts';
 
 const RED = 'rgba(230, 0, 0, 0.5)';
 
@@ -30,6 +31,8 @@ export function PlayView({
   const [check, setCheck] = useState<{ board: Uint8Array; wrong: number[] }>();
   const board = history.present;
   const solved = useMemo(() => isSolved(puzzle, board), [puzzle, board]);
+  const [started, setStarted] = useState(false); // the timer waits for the first move
+  const [elapsed] = useTimer(0, started && !solved);
   const wrong = check?.board === board ? check.wrong : null; // cleared by the next move
   const done = useMemo(() => {
     const { width: w, height: h } = puzzle;
@@ -57,6 +60,7 @@ export function PlayView({
   }, []);
 
   function paint(cells: number[], value: CellValue, start: boolean) {
+    setStarted(true);
     setHistory((h) => {
       const next = h.present.slice();
       for (const i of cells) next[i] = value;
@@ -118,7 +122,10 @@ export function PlayView({
           onClick={() => setCheck({ board, wrong: mistakes(puzzle, board) })}
         >
           Check
-        </button>
+        </button>{' '}
+        <span role="timer" aria-label="Time taken" className="timer">
+          {clock(elapsed)}
+        </span>
       </div>
       <p role="status">
         {solved

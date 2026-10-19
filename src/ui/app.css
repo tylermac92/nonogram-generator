@@ -295,6 +295,10 @@ fieldset button {
   touch-action: pinch-zoom; /* one finger paints; two fingers zoom and pan the page */
 }
 
+.timer {
+  font-variant-numeric: tabular-nums;
+}
+
 .play-controls button {
   margin-right: 4px;
 }
