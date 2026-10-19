@@ -47,6 +47,14 @@ body {
   background: #eee;
 }
 
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #e4e4f8;
+  color: #2a2a6b;
+}
+
 .verdict.valid {
   background: #d6f5dd;
   color: #0b5a1f;
@@ -155,6 +163,54 @@ body {
   color: #555;
 }
 
+.samples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+}
+
+.samples button {
+  padding: 2px;
+  margin-right: 4px;
+}
+
+.samples img {
+  display: block;
+  height: 64px;
+}
+
+.samples p {
+  flex: 1 1 280px;
+  margin: 0;
+  color: #555;
+}
+
+.compare .pictures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.compare .pictures.overlay {
+  position: relative;
+  display: block;
+  width: max-content; /* the photo's width, so the grid can sit on it */
+}
+
+.compare .pictures.overlay canvas + canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0.5;
+}
+
+.compare canvas {
+  display: block;
+  border: 1px solid #999;
+}
+
 .suggestions button {
   margin-right: 4px;
 }
@@ -195,6 +251,11 @@ fieldset button {
   height: 10mm; /* HEADING_MM */
   margin: 0;
   font-size: 14pt;
+}
+
+.sheet h2 small {
+  font-size: 11pt;
+  font-weight: normal;
 }
 
 .sheet svg {

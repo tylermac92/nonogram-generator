@@ -19,7 +19,7 @@ Plan for the sixteenth user story in `docs/user-stories.md`:
 | Sample picker | A "Try a sample" row of five thumbnail buttons (about 64 px tall, `alt` text such as "Horse") under the file inputs, always shown. Clicking one fetches the file and goes through the same `open()` as an upload, so it asks before clearing edits | One click from a fresh page, as the criterion asks. Keeping it visible lets you switch samples without reloading |
 | Tips | Beside the samples: "Pictures that work best: a dark subject on a plain, light background; strong contrast; cropped tight around the subject. Use Invert for a light subject on a dark background." | Covers contrast, plain backgrounds and cropping tight |
 | Compare view | A `<details>` "Compare with the photo" under the preview, shown when there's an image. Inside: two canvases of the same size, the crop of the photo and the grid (edits included) drawn as black cells on white, plus an "Overlay" checkbox. Overlay stacks the grid canvas on the photo at 50% opacity | The grid canvas covers exactly the crop rectangle, the same area `downscale` averages, so each cell sits on the pixels it came from. `<details>` needs no open/closed state of its own |
-| Moved criteria (M10, M11) | A browser test runs every sample at widths 10, 15, 20, 25, 30, 40 and 50 through the creator's pipeline. In the prototype, 6 of 35 runs fail. At least one must get a passing suggestion, and most must pass after auto-fix with under 2% of cells flipped | The samples are Valid at the default width, so the failing cases come from other sizes |
+| Moved criteria (M10, M11) | A browser test runs every sample at widths 10, 15, 20, 25, 30, 40 and 50 through the creator's pipeline. In the prototype, 5 of 35 runs fail. At least one must get a passing suggestion, and most must pass after auto-fix with under 2% of cells flipped | The samples are Valid at the default width, so the failing cases come from other sizes |
 | "Judged by solving them yourself" | I check the ordering in tests. **You** confirm the feel by playing three samples (suggested: cat at 15, Easy; cameraman at 25, Hard; horse at 50, Expert). I tick that box once you say they feel right | I can't judge how hard a puzzle feels to a person |
 
 ## Prototype results
@@ -34,7 +34,7 @@ The real pipeline, run in Node on the five samples (decoded with ImageMagick; th
 | cameraman | Easy | Medium | Medium | Hard | Hard | Expert | fails |
 | horse | fails | Medium | Medium | fails | fails | fails | Expert |
 
-- Every failing run (6 of 35) is Ambiguous with 4–21 cells undetermined. Each gets three passing suggestions, and auto-fix solves each with 1–2 flips: at most 1.3% of cells (horse at 10x8), and 0.2% or less on the others.
+- Every failing run (5 of 35) is Ambiguous with 4–21 cells undetermined. Each gets three passing suggestions, and auto-fix solves each with 1–2 flips: at most 1.3% of cells (horse at 10x8), and 0.2% or less on the others.
 - Valid random grids reach a depth of 3.8 at 10x10 (Hard) and 21 at 30x30 (Expert). Photos stay between 1.0 and 2.1.
 
 ## Files
