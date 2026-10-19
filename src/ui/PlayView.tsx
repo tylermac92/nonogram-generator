@@ -46,6 +46,9 @@ export function PlayView({
     started && !solved,
   );
   const seconds = Math.floor(elapsed / 1000);
+  // The banner plays once, when a move solves the board; never for a board restored solved.
+  const [win, setWin] = useState(solved ? 'done' : 'waiting');
+  if (solved && win === 'waiting') setWin('showing');
 
   useEffect(() => {
     if (started) saveProgress(key, { board, elapsed: seconds * 1000 });
@@ -167,19 +170,32 @@ export function PlayView({
         Click to fill, right-click to mark X, and click again to clear. Drag to
         paint along a row or column. Arrow keys, Space and X work too.
       </p>
-      <Preview
-        puzzle={puzzle}
-        cells={board}
-        highlight={wrong ? { cells: wrong, color: RED } : undefined}
-        onPaint={paint}
-        paintValue={paintValue}
-        lockAxis
-        zoomable
-        onCancel={cancelStroke}
-        done={done}
-        crosshair
-        label={`Puzzle board, ${puzzle.width} by ${puzzle.height}`}
-      />
+      <div className="board">
+        <Preview
+          puzzle={puzzle}
+          cells={board}
+          highlight={wrong ? { cells: wrong, color: RED } : undefined}
+          onPaint={paint}
+          paintValue={paintValue}
+          lockAxis
+          zoomable
+          onCancel={cancelStroke}
+          done={done}
+          crosshair
+          label={`Puzzle board, ${puzzle.width} by ${puzzle.height}`}
+        />
+        {win === 'showing' && (
+          <button
+            type="button"
+            className="win"
+            title="Skip"
+            onClick={() => setWin('done')}
+            onAnimationEnd={() => setWin('done')}
+          >
+            Solved!
+          </button>
+        )}
+      </div>
     </main>
   );
 }

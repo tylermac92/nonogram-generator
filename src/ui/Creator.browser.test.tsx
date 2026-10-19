@@ -1521,6 +1521,29 @@ describe('Creator', () => {
         await expect.poll(() => state(0, 0)).toBe('filled');
       });
 
+      const banner = () => page.getByRole('button', { name: 'Solved!' });
+
+      it('celebrates a solve once, and skips the banner on a click', async () => {
+        await openPlay();
+        solveByStrokes('mouse');
+        await expect.element(banner()).toBeVisible();
+        await banner().click();
+        expect(banner().query()).toBeNull();
+        await expect.element(solvedMessage()).toBeVisible();
+      });
+
+      it("doesn't celebrate a board restored already solved", async () => {
+        const solved = Array.from(heart.cells).join('');
+        localStorage.setItem(
+          heartKey(),
+          JSON.stringify({ board: solved, elapsed: 5000 }),
+        );
+        await openHeart();
+        await expect.element(solvedMessage()).toBeVisible();
+        expect(banner().query()).toBeNull();
+        expect(timer()).toBe('0:05');
+      });
+
       it('ignores a second finger', async () => {
         await openPlay();
         const second = { ...primary, pointerId: 2, isPrimary: false };
