@@ -11,6 +11,7 @@ import { decodeShare, encodeShare } from '../core/io/share.ts';
 import { gridFromRows } from '../core/puzzle/grid.ts';
 import { needsGuessing, randomGrid, wavesImage } from '../core/test-utils.ts';
 import App from './App.tsx';
+import { progressKey } from './progress.ts';
 
 /** White PNG (200×100 by default) with rectangles ([x, y, width, height, gray = 0]). */
 async function png(rects: number[][], width = 200, height = 100) {
@@ -1460,6 +1461,64 @@ describe('Creator', () => {
         const final = timer();
         await wait(1500);
         expect(timer()).toBe(final);
+      });
+
+      /** Opens the heart as a shared link, ready for 32 px strokes. */
+      async function openHeart() {
+        openLink('#p=' + encodeShare(heart));
+        await expect.element(board()).toBeVisible();
+        await expect
+          .poll(() => playCanvas().getBoundingClientRect().width)
+          .toBe(17 * 32 + 1);
+      }
+      const heartKey = () => progressKey(makePuzzle(heart));
+
+      it('restores the board and time when the same puzzle reopens', async () => {
+        await openHeart();
+        click(0, 0);
+        click(1, 0, 2);
+        await expect.poll(timer, { timeout: 2000 }).toBe('0:01');
+        await expect
+          .poll(() => localStorage.getItem(heartKey()))
+          .toMatch(/^\{"board":"12/);
+        await openHeart(); // a fresh page with the same link
+        await expect
+          .poll(() => [state(0, 0), state(1, 0)])
+          .toEqual(['filled', 'x']);
+        expect(timer()).toMatch(/^0:0[12]$/); // carries on from the saved time
+        await expect.element(undoButton()).toBeDisabled(); // history isn't saved
+      });
+
+      it('resets after asking, and forgets the saved progress', async () => {
+        await openHeart();
+        click(0, 0);
+        await expect
+          .poll(() => localStorage.getItem(heartKey()))
+          .not.toBeNull();
+        const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        await page.getByRole('button', { name: 'Reset' }).click();
+        expect(state(0, 0)).toBe('filled');
+        ask.mockReturnValue(true);
+        await page.getByRole('button', { name: 'Reset' }).click();
+        await expect.poll(() => state(0, 0)).toBe('empty');
+        expect(timer()).toBe('0:00');
+        expect(localStorage.getItem(heartKey())).toBeNull();
+        await wait(1200);
+        expect(timer()).toBe('0:00'); // waits for the next first move
+      });
+
+      it.each([
+        ['not JSON', 'garbage'],
+        ['the wrong size', JSON.stringify({ board: '1', elapsed: 0 })],
+        ['a bad cell', JSON.stringify({ board: '9'.repeat(225), elapsed: 0 })],
+        ['a bad time', JSON.stringify({ board: '1'.repeat(225), elapsed: -1 })],
+      ])('ignores saved progress that is %s', async (_, value) => {
+        localStorage.setItem(heartKey(), value);
+        await openHeart();
+        expect(state(0, 0)).toBe('empty');
+        expect(timer()).toBe('0:00');
+        click(0, 0);
+        await expect.poll(() => state(0, 0)).toBe('filled');
       });
 
       it('ignores a second finger', async () => {

@@ -10,6 +10,12 @@ import {
 import type { CellValue, Puzzle } from '../core/puzzle/types.ts';
 import { historyOf, record, redo, undo } from './history.ts';
 import { Preview } from './Preview.tsx';
+import {
+  clearProgress,
+  loadProgress,
+  progressKey,
+  saveProgress,
+} from './progress.ts';
 import { clock, useTimer } from './useTimer.ts';
 
 const RED = 'rgba(230, 0, 0, 0.5)';
@@ -24,15 +30,34 @@ export function PlayView({
   title: string;
   onClose?: () => void; // absent for a shared link: offer the creator instead
 }) {
+  const cellCount = puzzle.width * puzzle.height;
+  const key = useMemo(() => progressKey(puzzle), [puzzle]);
+  const [saved] = useState(() => loadProgress(key, cellCount));
   const [history, setHistory] = useState(() =>
-    historyOf(new Uint8Array(puzzle.width * puzzle.height)),
+    historyOf(saved?.board ?? new Uint8Array(cellCount)),
   );
   const [mode, setMode] = useState<'fill' | 'x'>('fill'); // for touch, where there's no right button
   const [check, setCheck] = useState<{ board: Uint8Array; wrong: number[] }>();
   const board = history.present;
   const solved = useMemo(() => isSolved(puzzle, board), [puzzle, board]);
-  const [started, setStarted] = useState(false); // the timer waits for the first move
-  const [elapsed] = useTimer(0, started && !solved);
+  const [started, setStarted] = useState(saved !== null); // the timer waits for the first move
+  const [elapsed, setElapsed] = useTimer(
+    saved?.elapsed ?? 0,
+    started && !solved,
+  );
+  const seconds = Math.floor(elapsed / 1000);
+
+  useEffect(() => {
+    if (started) saveProgress(key, { board, elapsed: seconds * 1000 });
+  }, [key, started, board, seconds]);
+
+  function reset() {
+    if (!confirm('Clear your progress on this puzzle?')) return;
+    clearProgress(key);
+    setHistory(historyOf(new Uint8Array(cellCount)));
+    setElapsed(0);
+    setStarted(false);
+  }
   const wrong = check?.board === board ? check.wrong : null; // cleared by the next move
   const done = useMemo(() => {
     const { width: w, height: h } = puzzle;
@@ -122,6 +147,9 @@ export function PlayView({
           onClick={() => setCheck({ board, wrong: mistakes(puzzle, board) })}
         >
           Check
+        </button>{' '}
+        <button type="button" onClick={reset}>
+          Reset
         </button>{' '}
         <span role="timer" aria-label="Time taken" className="timer">
           {clock(elapsed)}
