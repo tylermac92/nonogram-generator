@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makePuzzle } from '../puzzle/clues.ts';
 import { createGrid } from '../puzzle/grid.ts';
 import { randomGrid } from '../test-utils.ts';
-import { difficulty, type Difficulty } from './difficulty.ts';
+import { difficulty, score, type Difficulty } from './difficulty.ts';
 import { solve, type SolveResult } from './solve.ts';
 
 /** A solved 10x10 result (side 10) with the given cells fixed per round. */
@@ -38,6 +38,10 @@ describe('difficulty', () => {
     for (const status of ['stuck', 'contradiction'] as const) {
       expect(difficulty({ ...solved10([100]), status })).toBeNull();
     }
+  });
+
+  it('scores side times the average round a cell was fixed in', () => {
+    expect(score(solved10([50, 0, 50]))).toBe(20); // 10 x (50 x 1 + 50 x 3) / 100
   });
 
   // score = side x average round: 10 x depth here

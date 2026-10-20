@@ -38,18 +38,36 @@ docs/user-stories.md, docs/project-spec.md  # tick M16
 
 ## Results
 
-Filled in during steps 1–3.
+Step 1 rebuilt every sample at widths 10–50 with the browser's decoder. Every label and score matched the M16 prototype table, so all eight planned picks stand.
 
-| # | Sample and width | Score | Label before | Time | Your label | Label after |
-| --- | --- | --- | --- | --- | --- | --- |
-| 1 | | | | | | |
-| 2 | | | | | | |
-| 3 | | | | | | |
-| 4 | | | | | | |
-| 5 | | | | | | |
-| 6 | | | | | | |
-| 7 | | | | | | |
-| 8 | | | | | | |
+**Play these in order.** Each link opens the live site in play mode, with no title and no difficulty. Fill in your time and your own label as you go.
+
+| # | Link | Time | Your label |
+| --- | --- | --- | --- |
+| 1 | [Puzzle 1](https://tylermac92.github.io/nonogram-generator/#p=ARQU3X6yjF7dRLSJnDvyU0o-oYpi8M5Y-NiHSlN9A409zvavtTwQ2nN0T_rHkLzRovwsVQB_) | | |
+| 2 | [Puzzle 2](https://tylermac92.github.io/nonogram-generator/#p=ASge3zi8vzFzcFqzxthn8WwI228M0A28F2A1ciXbPcDrxBmCGPjYTRJ1XwqDWB8-AUta9leMEQX-b5EBogVruiWPahbEJroqbMgw-btz-E4_ZBW-07HuU389QmMFrwxZUbz4SmOzcrAUKfg_W3ZJAR6JSUJEmNauSBre_Fzm6mMB7aDo1bStvdZwvvgtfyMpn-F2F8q91Z09WQ) | | |
+| 3 | [Puzzle 3](https://tylermac92.github.io/nonogram-generator/#p=AQ8LO1pyiCMYuY4tq82kdoe1imKZHsvmMg) | | |
+| 4 | [Puzzle 4](https://tylermac92.github.io/nonogram-generator/#p=ATIm_xr6sWLyMYW5j2siFw77SPPZlUWGAlcafFkNmhBqn31_TNfQvY1Cj25G-s6sgEdadKltGJO5lXw8UnrpLTRzbFIjrMBMcKYgBrBviTZLBTbgZ-u30ZdHauYKWY8XSpSccMpFuWb4Tq_Pwc0322BwNv0rd1gZcPeGGbMaL59B35OjVCQHts_sRHzTgXOanMbdRADW5he4tFxwHYJFliV-upfTotxZNJFAKB2se5ncLdIFdjx0enGD90wOLfZLAsTyKReJ3hKIvE1YIerBOh9NbZ_5DZg9EkBAQSBnojjv30HXuMFfAacgA96NZ9z-bZg) | | |
+| 5 | [Puzzle 5](https://tylermac92.github.io/nonogram-generator/#p=ARQPn3wwikT-HQK_p_IPW_IAZjmeXDap4mGeUi92xqwbDX6O0f55Byt_) | | |
+| 6 | [Puzzle 6](https://tylermac92.github.io/nonogram-generator/#p=ARkZGT46tR830L85uOq00zO4X4UefSBf3ueiHFaKjv7PJoWWodiFvnFRH5qMybeJlTxZ33Qxf307j2hIZSmnVJghIFPIEuyzUyy8P7fHOocrdjs) | | |
+| 7 | [Puzzle 7](https://tylermac92.github.io/nonogram-generator/#p=ARkTWzy4swUUiQkTgyWJ2hkGoTXBSKTPNlJH-y2Ru8HS5e2F2vovrNlU_snpwwJTmeGRaAdUjTHu-OsXnLhBDg) | | |
+| 8 | [Puzzle 8](https://tylermac92.github.io/nonogram-generator/#p=ASgoGT46tR830L85uO600zy4X4refT-_3tiiHEnrDuF0ppmLQcd6eY6u35180bR2ZSJe23TOAO1ED2uK5Sm4k2MuwFPAGWywqyNELHfH33rMtgE6YBQwhJt5J-tsjpbjCQ8H5PDt3TVeQUKd8yFBqTUfqrGz14d8HbuP6UUyG00e48LleGYkcayu0j6NL5FviF10dOYi9HcuzgwrAxb5GhCFombU07HI_zf8poOzTuYIUQwftRCv8vaKky6a2YYr1raFzjasM9f27hg6) | | |
+
+<details>
+<summary>Answer key (open only after you've played all eight)</summary>
+
+| # | Sample and width | Score | Label before | Label after |
+| --- | --- | --- | --- | --- |
+| 1 | cameraman at 20 (20x20) | 25.7 | Medium | |
+| 2 | cat at 40 (40x30) | 37.8 | Hard | |
+| 3 | cat at 15 (15x11) | 13.2 | Easy | |
+| 4 | sailboat at 50 (50x38) | 57.6 | Expert | |
+| 5 | skyline at 20 (20x15) | 17.3 | Easy | |
+| 6 | cameraman at 25 (25x25) | 37.5 | Hard | |
+| 7 | sailboat at 25 (25x19) | 27.3 | Medium | |
+| 8 | cameraman at 40 (40x40) | 61.7 | Expert | |
+
+</details>
 
 Cutoffs before: Easy below 20, Medium below 35, Hard below 55. After: _to fill_.
 
