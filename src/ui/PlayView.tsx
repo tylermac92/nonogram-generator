@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
+  completedClues,
   CROSS,
   EMPTY,
   FILLED,
@@ -9,6 +10,13 @@ import {
 import type { CellValue, Puzzle } from '../core/puzzle/types.ts';
 import { historyOf, record, redo, undo } from './history.ts';
 import { Preview } from './Preview.tsx';
+import {
+  clearProgress,
+  loadProgress,
+  progressKey,
+  saveProgress,
+} from './progress.ts';
+import { clock, useTimer } from './useTimer.ts';
 
 const RED = 'rgba(230, 0, 0, 0.5)';
 
@@ -22,14 +30,52 @@ export function PlayView({
   title: string;
   onClose?: () => void; // absent for a shared link: offer the creator instead
 }) {
+  const cellCount = puzzle.width * puzzle.height;
+  const key = useMemo(() => progressKey(puzzle), [puzzle]);
+  const [saved] = useState(() => loadProgress(key, cellCount));
   const [history, setHistory] = useState(() =>
-    historyOf(new Uint8Array(puzzle.width * puzzle.height)),
+    historyOf(saved?.board ?? new Uint8Array(cellCount)),
   );
   const [mode, setMode] = useState<'fill' | 'x'>('fill'); // for touch, where there's no right button
   const [check, setCheck] = useState<{ board: Uint8Array; wrong: number[] }>();
   const board = history.present;
   const solved = useMemo(() => isSolved(puzzle, board), [puzzle, board]);
+  const [started, setStarted] = useState(saved !== null); // the timer waits for the first move
+  const [elapsed, setElapsed] = useTimer(
+    saved?.elapsed ?? 0,
+    started && !solved,
+  );
+  const seconds = Math.floor(elapsed / 1000);
+  // The banner plays once, when a move solves the board; never for a board restored solved.
+  const [win, setWin] = useState(solved ? 'done' : 'waiting');
+  if (solved && win === 'waiting') setWin('showing');
+
+  useEffect(() => {
+    if (started) saveProgress(key, { board, elapsed: seconds * 1000 });
+  }, [key, started, board, seconds]);
+
+  function reset() {
+    if (!confirm('Clear your progress on this puzzle?')) return;
+    clearProgress(key);
+    setHistory(historyOf(new Uint8Array(cellCount)));
+    setElapsed(0);
+    setStarted(false);
+  }
   const wrong = check?.board === board ? check.wrong : null; // cleared by the next move
+  const done = useMemo(() => {
+    const { width: w, height: h } = puzzle;
+    return {
+      rows: puzzle.rows.map((runs, y) =>
+        completedClues(runs, board.subarray(y * w, (y + 1) * w)),
+      ),
+      cols: puzzle.cols.map((runs, x) =>
+        completedClues(
+          runs,
+          Array.from({ length: h }, (_, y) => board[y * w + x]!),
+        ),
+      ),
+    };
+  }, [puzzle, board]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -42,12 +88,15 @@ export function PlayView({
   }, []);
 
   function paint(cells: number[], value: CellValue, start: boolean) {
+    setStarted(true);
     setHistory((h) => {
       const next = h.present.slice();
       for (const i of cells) next[i] = value;
       return start ? record(h, next) : { ...h, present: next };
     });
   }
+  /** Drops a stroke a pinch interrupted, as if it never happened. */
+  const cancelStroke = () => setHistory((h) => ({ ...undo(h), future: [] }));
   /** Fill (or X) the stroke, or clear it if its first cell already has that. */
   function paintValue(cell: number, mark: boolean) {
     const target = mark || mode === 'x' ? CROSS : FILLED;
@@ -101,7 +150,13 @@ export function PlayView({
           onClick={() => setCheck({ board, wrong: mistakes(puzzle, board) })}
         >
           Check
-        </button>
+        </button>{' '}
+        <button type="button" onClick={reset}>
+          Reset
+        </button>{' '}
+        <span role="timer" aria-label="Time taken" className="timer">
+          {clock(elapsed)}
+        </span>
       </div>
       <p role="status">
         {solved
@@ -115,15 +170,32 @@ export function PlayView({
         Click to fill, right-click to mark X, and click again to clear. Drag to
         paint along a row or column. Arrow keys, Space and X work too.
       </p>
-      <Preview
-        puzzle={puzzle}
-        cells={board}
-        highlight={wrong ? { cells: wrong, color: RED } : undefined}
-        onPaint={paint}
-        paintValue={paintValue}
-        lockAxis
-        label={`Puzzle board, ${puzzle.width} by ${puzzle.height}`}
-      />
+      <div className="board">
+        <Preview
+          puzzle={puzzle}
+          cells={board}
+          highlight={wrong ? { cells: wrong, color: RED } : undefined}
+          onPaint={paint}
+          paintValue={paintValue}
+          lockAxis
+          zoomable
+          onCancel={cancelStroke}
+          done={done}
+          crosshair
+          label={`Puzzle board, ${puzzle.width} by ${puzzle.height}`}
+        />
+        {win === 'showing' && (
+          <button
+            type="button"
+            className="win"
+            title="Skip"
+            onClick={() => setWin('done')}
+            onAnimationEnd={() => setWin('done')}
+          >
+            Solved!
+          </button>
+        )}
+      </div>
     </main>
   );
 }

@@ -3,6 +3,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent,
   type PointerEvent,
 } from 'react';
@@ -18,6 +19,16 @@ import {
   previewLayout,
   type Axis,
 } from './layout.ts';
+
+const ZOOM_MIN_CELL = 4;
+const DONE_GREY = '#aaa';
+const CROSSHAIR = 'rgba(26, 115, 232, 0.15)';
+type Done = { rows: boolean[][]; cols: boolean[][] };
+const MAX_CANVAS_PIXELS = 16_000_000;
+const onZoom = (notify: () => void) => {
+  visualViewport?.addEventListener('resize', notify);
+  return () => visualViewport?.removeEventListener('resize', notify);
+};
 
 /** Cells to tint, drawn over the cell values. */
 export interface Highlight {
@@ -38,6 +49,10 @@ export function Preview({
   onPaint,
   paintValue,
   lockAxis = false,
+  zoomable = false,
+  onCancel,
+  done,
+  crosshair = false,
   label = `Puzzle preview, ${puzzle.width} by ${puzzle.height}`,
 }: {
   puzzle: Puzzle;
@@ -50,6 +65,14 @@ export function Preview({
   /** What a stroke paints, from its first cell; `mark` is the right button or X key. Null ignores it. */
   paintValue?: (cell: number, mark: boolean) => CellValue | null;
   lockAxis?: boolean; // a drag stays on the row or column it started along
+  /** Play on phones: fits any board to the width, and stays sharp under the browser's pinch-zoom. */
+  zoomable?: boolean;
+  /** A stroke was cut short, by a pinch starting: undo what it painted. */
+  onCancel?: () => void;
+  /** Clue numbers to grey out, per line and number. */
+  done?: Done;
+  /** Tint the row and column under the pointer, or the keyboard cursor. */
+  crosshair?: boolean;
   label?: string;
 }) {
   const wrapper = useRef<HTMLDivElement>(null);
@@ -57,9 +80,15 @@ export function Preview({
   const [available, setAvailable] = useState(0);
   const [cursor, setCursor] = useState(0);
   const [focused, setFocused] = useState(false);
+  const [hover, setHover] = useState<number | null>(null);
   const layout = useMemo(
-    () => previewLayout(puzzle, available),
-    [puzzle, available],
+    () =>
+      previewLayout(puzzle, available, zoomable ? ZOOM_MIN_CELL : undefined),
+    [puzzle, available, zoomable],
+  );
+  const zoom = useSyncExternalStore(onZoom, () =>
+    // Half steps, so a pinch redraws a few times rather than every frame.
+    zoomable ? Math.ceil((visualViewport?.scale ?? 1) * 2) / 2 : 1,
   );
   const { width: w, height: h, solution } = puzzle;
   const shown = cells ?? solution.cells;
@@ -87,8 +116,25 @@ export function Preview({
         edits,
         fixed,
         focused && editable ? at : null,
+        zoom,
+        done,
+        crosshair ? (hover ?? (focused ? at : null)) : null,
       ),
-    [puzzle, shown, layout, highlight, edits, fixed, focused, at, editable],
+    [
+      puzzle,
+      shown,
+      layout,
+      highlight,
+      edits,
+      fixed,
+      focused,
+      at,
+      editable,
+      zoom,
+      done,
+      crosshair,
+      hover,
+    ],
   );
 
   function startPaint(e: PointerEvent) {
@@ -96,7 +142,8 @@ export function Preview({
     const cellUnder = (p: { clientX: number; clientY: number }) =>
       cellAt(layout, puzzle, p.clientX - rect.left, p.clientY - rect.top);
     const start = cellUnder(e);
-    if (!onPaint || start === null || e.button === 1) return;
+    // A second finger is the start of a pinch, not a stroke.
+    if (!onPaint || start === null || e.button === 1 || !e.isPrimary) return;
     const value = valueFor(start, e.button === 2);
     if (value === null) return;
     e.preventDefault();
@@ -115,10 +162,11 @@ export function Preview({
       onPaint(lineCells(last, cell, w), value, false);
       last = cell;
     };
-    const end = () => {
+    const end = (e: globalThis.PointerEvent) => {
       removeEventListener('pointermove', move);
       removeEventListener('pointerup', end);
       removeEventListener('pointercancel', end);
+      if (e.type === 'pointercancel') onCancel?.();
     };
     addEventListener('pointermove', move);
     addEventListener('pointerup', end);
@@ -157,6 +205,13 @@ export function Preview({
         aria-label={label}
         tabIndex={editable ? 0 : undefined}
         onPointerDown={startPaint}
+        onPointerMove={(e) => {
+          if (!crosshair) return;
+          const rect = canvas.current!.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          setHover(cellAt(layout, puzzle, x, e.clientY - rect.top));
+        }}
+        onPointerLeave={() => setHover(null)}
         onContextMenu={(e) => editable && e.preventDefault()}
         onKeyDown={onKeyDown}
         onFocus={() => setFocused(true)}
@@ -175,9 +230,16 @@ function draw(
   edits: Edits = new Map(),
   fixed: ReadonlySet<number> = new Set(),
   cursor: number | null,
+  zoom: number,
+  done: Done | undefined,
+  lines: number | null, // the cell whose row and column to tint
 ) {
   const { width: w, height: h } = puzzle;
-  const dpr = window.devicePixelRatio || 1;
+  // Device pixels for the zoomed size, within iOS Safari's canvas area limit.
+  const dpr = Math.min(
+    (window.devicePixelRatio || 1) * zoom,
+    Math.sqrt(MAX_CANVAS_PIXELS / ((width + 1) * (height + 1))),
+  );
   // One extra pixel so the outer border isn't clipped at the right and bottom edges.
   canvas.width = Math.round((width + 1) * dpr);
   canvas.height = Math.round((height + 1) * dpr);
@@ -206,6 +268,13 @@ function draw(
       ctx.fillRect(x, y, cell, cell);
     }
   });
+
+  if (lines !== null) {
+    const [x, y] = [lines % w, Math.floor(lines / w)];
+    ctx.fillStyle = CROSSHAIR;
+    ctx.fillRect(0, top + y * cell, left + w * cell, cell);
+    ctx.fillRect(left + x * cell, 0, cell, top + h * cell);
+  }
 
   ctx.fillStyle = highlight?.color ?? '';
   for (const i of highlight?.cells ?? []) {
@@ -261,22 +330,24 @@ function draw(
   ctx.textBaseline = 'middle';
   puzzle.rows.forEach((runs, y) => {
     const labels = clueLabels(runs);
-    labels.forEach((label, i) =>
+    labels.forEach((label, i) => {
+      ctx.fillStyle = done?.rows[y]![i] ? DONE_GREY : '#000';
       ctx.fillText(
         label,
         left - (labels.length - i - 0.5) * cell,
         top + (y + 0.5) * cell,
-      ),
-    );
+      );
+    });
   });
   puzzle.cols.forEach((runs, x) => {
     const labels = clueLabels(runs);
-    labels.forEach((label, i) =>
+    labels.forEach((label, i) => {
+      ctx.fillStyle = done?.cols[x]![i] ? DONE_GREY : '#000';
       ctx.fillText(
         label,
         left + (x + 0.5) * cell,
         top - (labels.length - i - 0.5) * cell,
-      ),
-    );
+      );
+    });
   });
 }

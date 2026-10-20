@@ -291,6 +291,64 @@ fieldset button {
   padding: 16px;
 }
 
+.play .preview canvas {
+  display: block;
+  margin: 0 auto; /* centred, so the win banner sits over it */
+  touch-action: pinch-zoom; /* one finger paints; two fingers zoom and pan the page */
+}
+
+.board {
+  position: relative; /* the win banner centres on it */
+}
+
+.win {
+  position: absolute;
+  inset: 0;
+  width: fit-content;
+  height: fit-content;
+  margin: auto;
+  padding: 12px 32px;
+  border: none;
+  border-radius: 16px;
+  background: #1a73e8;
+  color: #fff;
+  font-size: 32px;
+  font-weight: bold;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  animation: win 2.5s ease-out forwards;
+}
+
+@keyframes win {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  15% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  25% {
+    transform: scale(1);
+  }
+  75% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .win {
+    display: none; /* the "Solved" message is enough */
+  }
+}
+
+.timer {
+  font-variant-numeric: tabular-nums;
+}
+
 .play-controls button {
   margin-right: 4px;
 }

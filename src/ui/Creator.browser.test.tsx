@@ -11,6 +11,7 @@ import { decodeShare, encodeShare } from '../core/io/share.ts';
 import { gridFromRows } from '../core/puzzle/grid.ts';
 import { needsGuessing, randomGrid, wavesImage } from '../core/test-utils.ts';
 import App from './App.tsx';
+import { progressKey } from './progress.ts';
 
 /** White PNG (200×100 by default) with rectangles ([x, y, width, height, gray = 0]). */
 async function png(rects: number[][], width = 200, height = 100) {
@@ -213,10 +214,23 @@ afterEach(() => {
   root.unmount();
   container.remove();
   history.replaceState(null, '', location.pathname + location.search); // drop any #p= link
+  localStorage.clear(); // saved play progress
 });
 
 const upload = async (file: File) =>
   userEvent.upload(page.getByLabelText(/Image/), file);
+
+/** Renders the app afresh, as a browser opening this URL would. */
+function openLink(fragment: string) {
+  root.unmount();
+  history.replaceState(
+    null,
+    '',
+    location.pathname + location.search + fragment,
+  );
+  root = createRoot(container);
+  root.render(<App />);
+}
 
 describe('Creator', () => {
   it('shows a preview within 1 second of choosing an image', async () => {
@@ -1104,7 +1118,8 @@ describe('Creator', () => {
 
     it('marks X by touch in X mode, without scrolling the page', async () => {
       await openPlay();
-      expect(getComputedStyle(playCanvas()).touchAction).toBe('none');
+      // One finger can't pan: it paints. Two fingers are left to the browser.
+      expect(getComputedStyle(playCanvas()).touchAction).toBe('pinch-zoom');
       await page.getByRole('button', { name: 'X', exact: true }).click();
       const scroll = window.scrollY;
       playStroke({ pointerType: 'touch' }, [0, 0], [2, 0]);
@@ -1218,17 +1233,6 @@ describe('Creator', () => {
     });
 
     describe('shared links', () => {
-      /** Renders the app afresh, as a browser opening this URL would. */
-      function openLink(fragment: string) {
-        root.unmount();
-        history.replaceState(
-          null,
-          '',
-          location.pathname + location.search + fragment,
-        );
-        root = createRoot(container);
-        root.render(<App />);
-      }
       const creatorLink = () =>
         page.getByRole('link', { name: /make your own puzzle/i });
 
@@ -1303,6 +1307,257 @@ describe('Creator', () => {
         await expect.element(verdict(/^Valid/)).toBeVisible();
         location.hash = '#p=' + encodeShare(heart); // no reload, just hashchange
         await expect.element(board()).toBeVisible();
+      });
+    });
+
+    describe('comfort', () => {
+      /** Screen point at the centre of a cell of the 15×15 board (32 px cells). */
+      const at = (x: number, y: number) => {
+        const rect = playCanvas().getBoundingClientRect();
+        return {
+          clientX: rect.right - 1 - (15 - x - 0.5) * 32,
+          clientY: rect.bottom - 1 - (15 - y - 0.5) * 32,
+        };
+      };
+      const primary = { bubbles: true, pointerId: 1, isPrimary: true };
+      const undoButton = () => page.getByRole('button', { name: 'Undo' });
+      const redoButton = () => page.getByRole('button', { name: 'Redo' });
+
+      it('lets the browser pinch-zoom the play board, not the creator', async () => {
+        await openPlay();
+        expect(getComputedStyle(playCanvas()).touchAction).toBe('pinch-zoom');
+        await page.getByRole('button', { name: 'Back to editor' }).click();
+        const creatorCanvas = preview(15, 15).element();
+        expect(getComputedStyle(creatorCanvas).touchAction).toBe('none');
+      });
+
+      it('fits a 50x50 board to a phone-width screen', async () => {
+        container.style.width = '343px';
+        openLink('#p=' + encodeShare(randomGrid(50, 50, 1)));
+        const big = page.getByRole('img', { name: 'Puzzle board, 50 by 50' });
+        await expect.element(big).toBeVisible();
+        // Once drawn (an undrawn canvas is a default 300 px wide): nearly the full width, no wider.
+        const fits = () => {
+          const canvas = big.element() as HTMLCanvasElement;
+          const width = canvas.getBoundingClientRect().width;
+          return canvas.style.width !== '' && width > 250 && width <= 343;
+        };
+        await expect.poll(fits).toBe(true);
+      });
+
+      it('drops a stroke that a pinch cuts short', async () => {
+        await openPlay();
+        click(5, 5);
+        await expect.poll(() => state(5, 5)).toBe('filled');
+        playCanvas().dispatchEvent(
+          new PointerEvent('pointerdown', { ...primary, ...at(0, 0) }),
+        );
+        window.dispatchEvent(
+          new PointerEvent('pointermove', { ...primary, ...at(2, 0) }),
+        );
+        await expect.poll(() => state(2, 0)).toBe('filled');
+        window.dispatchEvent(new PointerEvent('pointercancel', primary));
+        await expect
+          .poll(() => [0, 1, 2].map((x) => state(x, 0)))
+          .toEqual(['empty', 'empty', 'empty']);
+        expect(state(5, 5)).toBe('filled'); // the stroke before it stays
+        await expect.element(redoButton()).toBeDisabled();
+        await undoButton().click();
+        await expect.poll(() => state(5, 5)).toBe('empty');
+      });
+
+      /** Darkest red value in a cell's box; negative x or y reach into the clues. */
+      function ink(x: number, y: number) {
+        const canvas = playCanvas();
+        const dpr = window.devicePixelRatio;
+        const px = canvas.width - dpr - (15 - x) * 32 * dpr;
+        const py = canvas.height - dpr - (15 - y) * 32 * dpr;
+        const { data } = canvas
+          .getContext('2d')!
+          .getImageData(px + 4 * dpr, py + 4 * dpr, 24 * dpr, 24 * dpr);
+        let min = 255;
+        for (let i = 0; i < data.length; i += 4) min = Math.min(min, data[i]!);
+        return min;
+      }
+
+      it('greys the clues of a completed row, and not once it breaks', async () => {
+        await openPlay();
+        const clues = () => [ink(-2, 1), ink(-1, 1)]; // row 1 is 3 3
+        await expect.poll(clues).toEqual([0, 0]);
+        playStroke({}, [2, 1], [4, 1]);
+        await expect.poll(() => state(4, 1)).toBe('filled');
+        expect(clues()).toEqual([0, 0]); // blanks on both sides: not closed yet
+        playStroke({ button: 2 }, [0, 1], [1, 1]);
+        click(5, 1, 2);
+        await expect.poll(clues).toEqual([0xaa, 0]); // closed by X marks
+        playStroke({}, [10, 1], [12, 1]);
+        await expect.poll(clues).toEqual([0xaa, 0xaa]);
+        click(5, 1);
+        await expect.poll(clues).toEqual([0, 0]);
+      });
+
+      /** Red at a cell's centre; negative x or y reach into the clues. */
+      function red(x: number, y: number) {
+        const canvas = playCanvas();
+        const dpr = window.devicePixelRatio;
+        const px = Math.round(canvas.width - dpr - (15 - x - 0.5) * 32 * dpr);
+        const py = Math.round(canvas.height - dpr - (15 - y - 0.5) * 32 * dpr);
+        return canvas.getContext('2d')!.getImageData(px, py, 1, 1).data[0];
+      }
+      const TINT = Math.round(255 * 0.85 + 26 * 0.15); // white under the 15% blue
+
+      it('tints the row and column under the mouse, or the keyboard cursor', async () => {
+        await openPlay();
+        playCanvas().dispatchEvent(
+          new PointerEvent('pointermove', { bubbles: true, ...at(7, 7) }),
+        );
+        // The board is still blank, so every cell is white unless tinted.
+        await expect.poll(() => red(0, 7)).toBe(TINT);
+        expect([red(7, 0), red(7, 14), red(-1, 7)]).toEqual([TINT, TINT, TINT]);
+        expect([red(0, 0), red(14, 14), red(0, 6)]).toEqual([255, 255, 255]);
+
+        playCanvas().dispatchEvent(
+          new PointerEvent('pointerout', { bubbles: true }),
+        );
+        await expect.poll(() => red(0, 7)).toBe(255);
+        await press(board(), '{ArrowDown}{ArrowDown}{ArrowDown}{ArrowDown}');
+        await expect.poll(() => red(14, 4)).toBe(TINT); // row 4 from the cursor at (0, 4)
+        expect(red(0, 14)).toBe(TINT); // column 0
+        expect(red(14, 14)).toBe(255);
+      });
+
+      const timer = () => page.getByRole('timer').element().textContent;
+      /** Fakes the tab being hidden or shown again. */
+      function setHidden(hidden: boolean) {
+        if (hidden) {
+          Object.defineProperty(document, 'visibilityState', {
+            configurable: true,
+            get: () => 'hidden',
+          });
+        } else {
+          delete (document as { visibilityState?: unknown }).visibilityState;
+        }
+        document.dispatchEvent(new Event('visibilitychange'));
+      }
+      const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+      it('times from the first move, pausing while the tab is hidden', async () => {
+        await openPlay();
+        await wait(1200);
+        expect(timer()).toBe('0:00'); // no move yet
+        click(0, 0);
+        await expect.poll(timer, { timeout: 2000 }).toBe('0:01');
+        setHidden(true);
+        try {
+          const paused = timer();
+          await wait(1500);
+          expect(timer()).toBe(paused);
+        } finally {
+          setHidden(false);
+        }
+        await expect.poll(timer, { timeout: 2000 }).toBe('0:02');
+      });
+
+      it('stops the timer once solved', async () => {
+        await openPlay();
+        solveByStrokes('mouse');
+        await expect.element(solvedMessage()).toBeVisible();
+        const final = timer();
+        await wait(1500);
+        expect(timer()).toBe(final);
+      });
+
+      /** Opens the heart as a shared link, ready for 32 px strokes. */
+      async function openHeart() {
+        openLink('#p=' + encodeShare(heart));
+        await expect.element(board()).toBeVisible();
+        await expect
+          .poll(() => playCanvas().getBoundingClientRect().width)
+          .toBe(17 * 32 + 1);
+      }
+      const heartKey = () => progressKey(makePuzzle(heart));
+
+      it('restores the board and time when the same puzzle reopens', async () => {
+        await openHeart();
+        click(0, 0);
+        click(1, 0, 2);
+        await expect.poll(timer, { timeout: 2000 }).toBe('0:01');
+        await expect
+          .poll(() => localStorage.getItem(heartKey()))
+          .toMatch(/^\{"board":"12/);
+        await openHeart(); // a fresh page with the same link
+        await expect
+          .poll(() => [state(0, 0), state(1, 0)])
+          .toEqual(['filled', 'x']);
+        expect(timer()).toMatch(/^0:0[12]$/); // carries on from the saved time
+        await expect.element(undoButton()).toBeDisabled(); // history isn't saved
+      });
+
+      it('resets after asking, and forgets the saved progress', async () => {
+        await openHeart();
+        click(0, 0);
+        await expect
+          .poll(() => localStorage.getItem(heartKey()))
+          .not.toBeNull();
+        const ask = vi.spyOn(window, 'confirm').mockReturnValue(false);
+        await page.getByRole('button', { name: 'Reset' }).click();
+        expect(state(0, 0)).toBe('filled');
+        ask.mockReturnValue(true);
+        await page.getByRole('button', { name: 'Reset' }).click();
+        await expect.poll(() => state(0, 0)).toBe('empty');
+        expect(timer()).toBe('0:00');
+        expect(localStorage.getItem(heartKey())).toBeNull();
+        await wait(1200);
+        expect(timer()).toBe('0:00'); // waits for the next first move
+      });
+
+      it.each([
+        ['not JSON', 'garbage'],
+        ['the wrong size', JSON.stringify({ board: '1', elapsed: 0 })],
+        ['a bad cell', JSON.stringify({ board: '9'.repeat(225), elapsed: 0 })],
+        ['a bad time', JSON.stringify({ board: '1'.repeat(225), elapsed: -1 })],
+      ])('ignores saved progress that is %s', async (_, value) => {
+        localStorage.setItem(heartKey(), value);
+        await openHeart();
+        expect(state(0, 0)).toBe('empty');
+        expect(timer()).toBe('0:00');
+        click(0, 0);
+        await expect.poll(() => state(0, 0)).toBe('filled');
+      });
+
+      const banner = () => page.getByRole('button', { name: 'Solved!' });
+
+      it('celebrates a solve once, and skips the banner on a click', async () => {
+        await openPlay();
+        solveByStrokes('mouse');
+        await expect.element(banner()).toBeVisible();
+        await banner().click();
+        expect(banner().query()).toBeNull();
+        await expect.element(solvedMessage()).toBeVisible();
+      });
+
+      it("doesn't celebrate a board restored already solved", async () => {
+        const solved = Array.from(heart.cells).join('');
+        localStorage.setItem(
+          heartKey(),
+          JSON.stringify({ board: solved, elapsed: 5000 }),
+        );
+        await openHeart();
+        await expect.element(solvedMessage()).toBeVisible();
+        expect(banner().query()).toBeNull();
+        expect(timer()).toBe('0:05');
+      });
+
+      it('ignores a second finger', async () => {
+        await openPlay();
+        const second = { ...primary, pointerId: 2, isPrimary: false };
+        playCanvas().dispatchEvent(
+          new PointerEvent('pointerdown', { ...second, ...at(3, 3) }),
+        );
+        window.dispatchEvent(new PointerEvent('pointerup', second));
+        await new Promise((r) => setTimeout(r, 100));
+        expect(state(3, 3)).toBe('empty');
+        await expect.element(undoButton()).toBeDisabled();
       });
     });
   });
