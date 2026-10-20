@@ -84,7 +84,7 @@ A puzzle passes when the line solver alone fills every cell: that proves the sol
 
 Only Valid counts as passing; export stays available for the other verdicts, behind a warning.
 
-**Difficulty rating.** A heuristic from the line solver's trace: number of rounds needed, scaled by grid size, mapped to Easy / Medium / Hard / Expert. Tune the thresholds against the bundled sample puzzles and label the rating as an estimate. Decided in M16: the score is √(width × height) times the average round in which a cell is fixed, with Easy below 20, Medium below 35, Hard below 55, and Expert above that.
+**Difficulty rating.** A heuristic from the line solver's trace: number of rounds needed, scaled by grid size, mapped to Easy / Medium / Hard / Expert. Tune the thresholds against the bundled sample puzzles and label the rating as an estimate. Decided in M16: the score is √(width × height) times the average round in which a cell is fixed, with Easy below 17.6, Medium below 36, Hard below 54, and Expert above that (cutoffs from M18).
 
 ## Repair tools
 
@@ -200,7 +200,7 @@ Seventeen small milestones in build order; each ends in something you can run or
 
 ### Phase 6 — Polish
 
-- [ ] **M16. Creator extras.** Difficulty badge, sample images with tips, compare and overlay view.
+- [x] **M16. Creator extras.** Difficulty badge, sample images with tips, compare and overlay view.
   - Done when: ratings across the samples feel sensibly ordered.
 - [x] **M17. Comfort play.** Pinch-zoom and pan, greyed-out clues, row/column highlight, timer, autosave, win animation; ship each one separately.
   - Done when: a 50x50 is playable on a phone.

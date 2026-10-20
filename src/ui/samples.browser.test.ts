@@ -13,6 +13,7 @@ import type { Grid } from '../core/puzzle/types.ts';
 import { autoFix } from '../core/repair/autofix.ts';
 import { DULL, fillFraction, suggestSettings } from '../core/repair/suggest.ts';
 import { difficulty, type Difficulty } from '../core/solver/difficulty.ts';
+import { play } from '../core/solver/player.ts';
 import { solve } from '../core/solver/solve.ts';
 import { gridSize } from './layout.ts';
 import cameraman from './samples/cameraman.jpg';
@@ -72,6 +73,23 @@ describe('sample images', () => {
         .map((r) => ORDER.indexOf(r.rating));
       expect(ranks, name).toEqual([...ranks].sort((a, b) => a - b));
     }
+  });
+
+  // M18: the simulated player stands in for a person. Ranked by the lines it
+  // reads, the Valid runs get M16's label sizes (9 Easy, 12 Medium, 6 Hard,
+  // 3 Expert); the cutoffs were fitted to those labels. Skyline at 25 is the
+  // one accepted mismatch: little work, but Medium by score.
+  it('rate as the simulated player ranks them, but for one', () => {
+    const valid = runs.filter((r) => r.rating);
+    expect(valid).toHaveLength(30); // the label sizes below assume these runs
+    const work = new Map(valid.map((r) => [r, play(makePuzzle(r.grid))]));
+    for (const run of valid) expect(work.get(run)!.solved).toBe(true);
+    const labels = [9, 12, 6, 3].flatMap((n, i) => Array(n).fill(ORDER[i]));
+    const differ = [...valid]
+      .sort((a, b) => work.get(a)!.reads - work.get(b)!.reads)
+      .filter((run, i) => run.rating !== labels[i])
+      .map((run) => `${run.name} at ${run.width}`);
+    expect(differ).toEqual(['skyline at 25']);
   });
 
   // Moved here from M10 and M11, which had no sample images yet.

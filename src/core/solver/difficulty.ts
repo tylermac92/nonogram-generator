@@ -2,8 +2,8 @@ import type { SolveResult } from './solve.ts';
 
 export type Difficulty = 'Easy' | 'Medium' | 'Hard' | 'Expert';
 
-/** Upper score bounds, tuned against the bundled samples (see docs/plans/m16). */
-export const THRESHOLDS = { Easy: 20, Medium: 35, Hard: 55 };
+/** Upper score bounds, fitted to a simulated player on the samples (see docs/plans/m18). */
+export const THRESHOLDS = { Easy: 17.6, Medium: 36, Hard: 54 };
 
 /**
  * The grid's side length times the average round in which a cell got fixed.

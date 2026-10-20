@@ -46,12 +46,12 @@ describe('difficulty', () => {
 
   // score = side x average round: 10 x depth here
   it.each([
-    [[1, 99], 'Easy'], // 19.9
-    [[0, 100], 'Medium'], // 20
-    [[1, 0, 49, 50], 'Medium'], // 34.8
-    [[0, 0, 50, 50], 'Hard'], // 35
-    [[1, 0, 0, 0, 49, 50], 'Hard'], // 54.6
-    [[0, 0, 0, 0, 50, 50], 'Expert'], // 55
+    [[25, 75], 'Easy'], // 17.5
+    [[24, 76], 'Medium'], // 17.6
+    [[1, 0, 39, 60], 'Medium'], // 35.8
+    [[0, 0, 40, 60], 'Hard'], // 36
+    [[1, 0, 0, 0, 59, 40], 'Hard'], // 53.6
+    [[0, 0, 0, 0, 60, 40], 'Expert'], // 54
   ])('rates deductions %j as %s', (deductions, label) => {
     expect(difficulty(solved10(deductions))).toBe(label);
   });
