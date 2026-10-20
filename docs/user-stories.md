@@ -242,7 +242,7 @@ One user story per milestone from the project spec, each with a description and 
 **Acceptance criteria:**
 
 - [x] Every Valid puzzle shows a difficulty badge labelled as an estimate; non-Valid puzzles show none.
-- [ ] Across the sample set, ratings rise with puzzle size and complexity, judged by solving them yourself, and the thresholds are tuned to match.
+- [x] Across the sample set, ratings rise with puzzle size and complexity, judged against a simulated player (M18), and the thresholds are tuned to match.
 - [x] The difficulty appears in the print view and the JSON project file.
 - [x] A first-time visitor with no image sees the sample images and can load one with one click.
 - [x] The tips panel covers contrast, plain backgrounds, and cropping tight.

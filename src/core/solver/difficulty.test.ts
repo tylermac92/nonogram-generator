@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { makePuzzle } from '../puzzle/clues.ts';
 import { createGrid } from '../puzzle/grid.ts';
 import { randomGrid } from '../test-utils.ts';
-import { difficulty, type Difficulty } from './difficulty.ts';
+import { difficulty, score, type Difficulty } from './difficulty.ts';
 import { solve, type SolveResult } from './solve.ts';
 
 /** A solved 10x10 result (side 10) with the given cells fixed per round. */
@@ -40,14 +40,18 @@ describe('difficulty', () => {
     }
   });
 
+  it('scores side times the average round a cell was fixed in', () => {
+    expect(score(solved10([50, 0, 50]))).toBe(20); // 10 x (50 x 1 + 50 x 3) / 100
+  });
+
   // score = side x average round: 10 x depth here
   it.each([
-    [[1, 99], 'Easy'], // 19.9
-    [[0, 100], 'Medium'], // 20
-    [[1, 0, 49, 50], 'Medium'], // 34.8
-    [[0, 0, 50, 50], 'Hard'], // 35
-    [[1, 0, 0, 0, 49, 50], 'Hard'], // 54.6
-    [[0, 0, 0, 0, 50, 50], 'Expert'], // 55
+    [[25, 75], 'Easy'], // 17.5
+    [[24, 76], 'Medium'], // 17.6
+    [[1, 0, 39, 60], 'Medium'], // 35.8
+    [[0, 0, 40, 60], 'Hard'], // 36
+    [[1, 0, 0, 0, 59, 40], 'Hard'], // 53.6
+    [[0, 0, 0, 0, 60, 40], 'Expert'], // 54
   ])('rates deductions %j as %s', (deductions, label) => {
     expect(difficulty(solved10(deductions))).toBe(label);
   });
